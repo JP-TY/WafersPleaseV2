@@ -15,6 +15,7 @@ export * from './assessment/metrology.js';
 export * from './evaluation/scoring.js';
 export * from './assessment/metrics.js';
 export * from './shift/shift-director.js';
+export * from './shift/campaign.js';
 export * from './rework/process.js';
 export * from './rework/rca-clean.js';
 export * from './rework/silicide-etch.js';

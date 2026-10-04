@@ -23,7 +23,7 @@ import {
 } from '../ui/panel.js';
 import { mountClipboard, type BenchMount } from '../ui/bench.js';
 import { LAYER_LABELS } from '@wafers/sim';
-import type { DayConfig, DefectProfile, RuleMatrix, ShiftPhase } from '@wafers/data';
+import type { DayConfig, DefectProfile, RuleMatrix } from '@wafers/data';
 import type { Scene } from '@babylonjs/core/scene.js';
 import { LAYOUT, TRAVELER_YAW } from './bay.js';
 
@@ -38,7 +38,7 @@ export class TravelerView {
   private day: DayConfig | null = null;
   private rules: RuleMatrix | null = null;
   private defects: readonly DefectProfile[] = [];
-  private phase: ShiftPhase = 'Briefing';
+  private phase: string = 'Briefing';
   private waferIndex = 0;
   private totalWafers = 0;
   private routingStep: keyof typeof LAYER_LABELS | null = null;
@@ -60,7 +60,7 @@ export class TravelerView {
     this.panel.invalidate();
   }
 
-  setPhase(phase: ShiftPhase): void {
+  setPhase(phase: string): void {
     this.phase = phase;
     this.panel.invalidate();
   }

@@ -52,6 +52,7 @@ export function frameWorkspace(camera: ArcRotateCamera, opts: { phase?: string; 
   // board sits unreadably small on the back wall while the camera is still framed
   // on the bench.
   const reading =
+    opts.phase === 'Progression' ||
     opts.phase === 'Briefing' ||
     opts.phase === 'Debrief' ||
     opts.phase === 'Complete' ||

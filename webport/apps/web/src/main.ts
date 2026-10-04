@@ -47,9 +47,7 @@ const run = makeRunSeed(Number.isFinite(seedParam) ? seedParam : 20260904);
 const difficulty = Number(params.get('difficulty') ?? '0') || 0;
 const dayParam = Number(params.get('day') ?? '1');
 const day = DAYS.find((d) => d.dayNumber === dayParam) ?? DAYS[0]!;
-const rules = (matrixData as { ruleMatrices: RuleMatrix[] }).ruleMatrices.find(
-  (r) => r.id === `rule-matrix-day-${day.dayNumber}`,
-)!;
+const MATRICES = (matrixData as { ruleMatrices: RuleMatrix[] }).ruleMatrices;
 
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
 const { engine, scene, camera } = createStage(canvas);
@@ -85,11 +83,14 @@ const benches: Record<string, ReworkBenchHandle> = {
 // them. Without it, benches are hidden until a Rework stamp opens one.
 const forcedStation = params.get('station');
 
+// The session owns a Campaign, so it takes the whole three-day configuration
+// rather than one day. `?day=N` jumps straight to that day for testing.
 const session = new ShiftSession(
   scene,
-  { day, rules, defects: DEFECTS, tools: TOOLS, scoring: SCORING, seed: run.seed },
+  { days: DAYS, rules: MATRICES, defects: DEFECTS, tools: TOOLS, scoring: SCORING, seed: run.seed },
   benches,
 );
+if (dayParam > 1) session.skipToDay(dayParam);
 session.setReworkBenches(benches);
 if (!forcedStation) for (const b of Object.values(benches)) b.setVisible(false);
 
@@ -193,11 +194,40 @@ function syncHud(): void {
     }
   }
   if (session.debriefComplete) {
+    const done = document.createElement('button');
+    done.className = 'primary';
+    done.textContent = 'FILE THE RECORD — PROGRESSION BOARD';
+    done.onclick = () => session.finishDay();
+    hud.appendChild(done);
+  }
+  if (phase === 'Progression') {
+    const board = document.createElement('div');
+    board.className = 'tag';
+    board.textContent = session.certified
+      ? 'CERTIFIED — all three days cleared both gates'
+      : `DAY ${session.dayNumber} RECORDED — review it on the board`;
+    hud.appendChild(board);
+
+    if (!session.campaign.isComplete) {
+      const next = document.createElement('button');
+      next.className = 'primary';
+      next.textContent = `BEGIN DAY ${Math.min(3, session.dayNumber + 1)}`;
+      next.onclick = () => session.nextDay();
+      hud.appendChild(next);
+    }
     const again = document.createElement('button');
-    again.className = 'primary';
-    again.textContent = 'RESTART SHIFT';
-    again.onclick = () => location.reload();
+    again.className = 'tab';
+    again.textContent = `REPLAY DAY ${session.dayNumber}`;
+    again.onclick = () => session.retryDay();
     hud.appendChild(again);
+
+    if (session.campaign.isComplete) {
+      const restart = document.createElement('button');
+      restart.className = 'primary';
+      restart.textContent = 'START A NEW TRAINING RECORD';
+      restart.onclick = () => location.reload();
+      hud.appendChild(restart);
+    }
   }
 
   const meta = document.createElement('div');
@@ -212,6 +242,9 @@ function syncHud(): void {
 session.onStateChange = () => {
   frameWorkspace(camera, { phase: session.currentPhase, quizOpen: session.quizOpen });
   syncHud();
+};
+session.onProgressionChange = () => {
+  session.progression.setCampaign(session.campaign, true);
 };
 session.onStateChange();
 
@@ -234,6 +267,9 @@ session.onStateChange();
   answerQuiz: (i: number) => session.answerQuiz(i),
   nextQuiz: () => session.nextQuiz(),
   glossary: () => session.toggleGlossary(),
+  finishDay: () => session.finishDay(),
+  nextDay: () => session.nextDay(),
+  retryDay: () => session.retryDay(),
 };
 
 // Fixed timestep so the physics does not depend on frame rate — required for

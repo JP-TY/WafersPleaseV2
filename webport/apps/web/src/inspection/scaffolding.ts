@@ -407,6 +407,11 @@ export class QuizBoard {
     return this.revealed;
   }
 
+  /** The question currently on the board. */
+  get currentQuestion(): QuizQuestion | null {
+    return this.questions[this.index] ?? null;
+  }
+
   /** Questions remaining, including the one on screen. */
   get remaining(): number {
     return this.questions.length - this.index;

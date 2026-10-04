@@ -30,35 +30,39 @@ import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder.js';
 
 import {
+  Campaign,
   ShiftDirector,
   measure,
   addReading,
   EMPTY_EVIDENCE,
   TOOL_SPECS,
+  type CampaignConfig,
   type PlayerAction,
   type WaferEvidence,
 } from '@wafers/sim';
 import { Rng } from '@wafers/sim';
-import type { DayConfig, DefectProfile, RuleMatrix, ScoringConfig, ToolConfig, ToolType } from '@wafers/data';
+import type { DefectProfile, ToolType } from '@wafers/data';
 
 import { WaferStage } from './wafer-stage.js';
 import { TravelerView } from './traveler-view.js';
 import { ClusterView } from './cluster-view.js';
 import { StampBank } from './stamp-bank.js';
 import { BriefingView, DebriefView } from './boards.js';
-import { QuizBoard, GlossaryTablet } from './scaffolding.js';
+import { QuizBoard, GlossaryTablet, type QuizQuestion } from './scaffolding.js';
+import { ProgressionBoard } from './progression-view.js';
 import { matte } from '../scene.js';
 
-export interface ShiftConfig {
-  readonly day: DayConfig;
-  readonly rules: RuleMatrix;
-  readonly defects: readonly DefectProfile[];
-  readonly tools: readonly ToolConfig[];
-  readonly scoring: ScoringConfig;
-  readonly seed: number;
-}
+export interface ShiftConfig extends CampaignConfig {}
 
-export type ShiftPhase = 'Briefing' | 'Inspection' | 'Break' | 'Review' | 'EndOfDay' | 'Debrief' | 'Complete';
+export type ShiftPhase =
+  | 'Progression'
+  | 'Briefing'
+  | 'Inspection'
+  | 'Break'
+  | 'Review'
+  | 'EndOfDay'
+  | 'Debrief'
+  | 'Complete';
 
 /** Rework benches, opened when the player stamps Rework. */
 export interface ReworkBenchHandle {
@@ -86,7 +90,15 @@ function stampColor(action: PlayerAction): string {
 }
 
 export class ShiftSession {
-  readonly director: ShiftDirector;
+  /**
+   * The campaign, not a single shift.
+   *
+   * GDD §9 is a three-day progression with cross-day state, so the session owns a
+   * `Campaign` and swaps the director when the day changes. `director` is
+   * recreated per day, which is why it is not a readonly field any more.
+   */
+  private _campaign: Campaign;
+  director!: ShiftDirector;
 
   private readonly stage: WaferStage;
   private readonly traveler: TravelerView;
@@ -96,6 +108,7 @@ export class ShiftSession {
   private readonly debrief: DebriefView;
   private readonly quiz: QuizBoard;
   private readonly glossary: GlossaryTablet;
+  readonly progression: ProgressionBoard;
   /**
    * Permanent competency boosts earned from the GDD §12 shift-end quiz.
    * Accumulated across days, never spent — the GDD calls them "permanent
@@ -105,9 +118,8 @@ export class ShiftSession {
   private readonly crossDial: { mesh: import('@babylonjs/core/Meshes/abstractMesh.js').AbstractMesh };
 
   /** Tools available today (GDD §9 gates the roster per day). */
-  private readonly availableTools: readonly ToolType[];
-  private readonly toolAccuracy = new Map<ToolType, number>();
-  private readonly toolByType = new Map<ToolType, ToolConfig>();
+  private availableTools: readonly ToolType[] = [];
+  private readonly allDefects: readonly DefectProfile[] = [];
 
   /** The wafer under inspection, and the evidence gathered on it. */
   private currentWaferIndex = -1;
@@ -129,29 +141,21 @@ export class ShiftSession {
 
   /** Set by the owner so the HUD can report state; not used for logic. */
   onStateChange: () => void = () => {};
+  /** Fired when the campaign's day or pass/fail state changes. */
+  onProgressionChange: () => void = () => {};
 
   constructor(
     scene: Scene,
     cfg: ShiftConfig,
     reworkBenches: Record<string, ReworkBenchHandle>,
   ) {
-    this.availableTools = cfg.day.availableTools;
-    for (const t of cfg.tools) {
-      this.toolAccuracy.set(t.toolType, t.accuracy);
-      this.toolByType.set(t.toolType, t);
-    }
+    this.allDefects = cfg.defects;
 
-    this.director = new ShiftDirector({
-      day: cfg.day,
-      defects: cfg.defects,
-      ruleMatrix: cfg.rules,
-      scoring: cfg.scoring,
-      seed: cfg.seed,
-    });
+    this._campaign = new Campaign(cfg);
 
-    // Forked off the shift seed, NOT shared with the lot. Drawing quiz questions
-    // must not perturb the metrology rolls, or taking the quiz would change the
-    // wafers and break GDD §16 replay.
+    // Forked off the campaign seed, NOT shared with any lot. Drawing quiz
+    // questions must not perturb the metrology rolls, or taking the quiz would
+    // change the wafers and break GDD §16 replay.
     this.quizRng = new Rng(cfg.seed ^ 0x5eed);
 
     this.stage = new WaferStage(scene);
@@ -161,6 +165,7 @@ export class ShiftSession {
     this.briefing = new BriefingView(scene);
     this.debrief = new DebriefView(scene);
     this.quiz = new QuizBoard(scene);
+    this.progression = new ProgressionBoard(scene);
     this.glossary = new GlossaryTablet(scene);
     this.quiz.onAnswer = (_r, pool) => {
       this.competencyBoosts = pool;
@@ -168,8 +173,10 @@ export class ShiftSession {
     };
     this.crossDial = { mesh: this.buildCrossDial(scene) };
 
-    this.traveler.setShiftContext(cfg.day, cfg.rules, cfg.defects);
-    this.briefing.setDay(cfg.day);
+    // Bind the views to the campaign's current day. This has to happen AFTER the
+    // views are constructed: `beginDay` feeds the traveler and the briefing board,
+    // so calling it first dereferences fields that do not exist yet.
+    this.beginDay(this._campaign);
 
     // GDD §4: hotkeys 1-4 for metrology mode switching. Hotkeys are handled on
     // the document rather than the canvas so they work regardless of focus.
@@ -207,6 +214,84 @@ export class ShiftSession {
   // Shift control
   // -------------------------------------------------------------------------
 
+  /**
+   * Point the session at a campaign day: fresh director, fresh roster, fresh
+   * traveler context. Called on construction and on every day change.
+   */
+  private beginDay(campaign: Campaign): void {
+    // `ruleMatrix` is the single matrix for this day, resolved by the campaign.
+    this._campaign = campaign;
+    this.director = campaign.createDirector();
+    this.competencyBoosts = campaign.boosts;
+    this.availableTools = [...campaign.day.availableTools];
+    this.traveler.setShiftContext(campaign.day, campaign.ruleMatrix, this.allDefects);
+    this.briefing.setDay(campaign.day);
+    this.phase = 'Briefing';
+    this.currentWaferIndex = -1;
+    this.evidence = EMPTY_EVIDENCE;
+    this.toolsRunThisWafer = [];
+    this.shiftSeconds = 0;
+  }
+
+  /**
+   * GDD §9: finish the day, bank the boosts, and move to the next.
+   *
+   * `recordDay` is where the pass decision and the boost banking happen, so it
+   * must run BEFORE `advance` — otherwise the boosts land against the wrong day.
+   */
+  completeDay(): { passed: boolean; dayNumber: number } | null {
+    if (this.phase !== 'Debrief' && this.phase !== 'Complete' && this.phase !== 'EndOfDay') return null;
+    // The session banks quiz boosts locally as they are earned, so the boost
+    // total has to be handed to the campaign here or it never crosses the day
+    // boundary and Day 2 starts with nothing.
+    const rec = this.campaign.recordDay(this.director, this.competencyBoosts);
+    this.phase = 'Progression';
+    this.applyPhaseVisibility();
+    this.onProgressionChange();
+    this.onStateChange();
+    return { passed: rec.passed, dayNumber: rec.dayNumber };
+  }
+
+  /** Show the progression board between days. */
+  showProgression(showResults = false): void {
+    this.progression.setCampaign(this.campaign, showResults);
+    this.progression.setVisible(true);
+    this.onStateChange();
+  }
+
+  /** The current campaign. Read-only: use `nextDay` / `retryDay` / `skipToDay`. */
+  get campaign(): Campaign {
+    return this._campaign;
+  }
+
+  /** GDD §9: move to the next unlocked day. */
+  nextDay(): void {
+    this.beginDay(this._campaign.advance());
+    this.applyPhaseVisibility();
+    this.onStateChange();
+  }
+
+  /**
+   * Jump to a specific day without requiring the earlier ones to be passed.
+   *
+   * Used by `?day=N` and by the tests. Not the same as `nextDay`: it deliberately
+   * ignores the unlock chain, so it must stay a development and inspection
+   * affordance rather than something the progression offers mid-run.
+   */
+  skipToDay(dayNumber: number): void {
+    let c = new Campaign(this._campaign.config, Math.max(1, Math.min(dayNumber, 3)));
+    this.beginDay(c);
+    this.applyPhaseVisibility();
+    this.onStateChange();
+  }
+
+  /** GDD §9: replay the day just failed. */
+  retryDay(): void {
+    this.beginDay(this._campaign.retry());
+    this.applyPhaseVisibility();
+    this.onStateChange();
+  }
+
   /** Leave the briefing board and start inspection. GDD §5 phase 1 -> 2. */
   beginShift(): void {
     this.director.beginShift();
@@ -225,6 +310,23 @@ export class ShiftSession {
     this.debrief.setReport(this.director.completeShift().debrief);
     this.applyPhaseVisibility();
     this.onStateChange();
+  }
+
+  /**
+   * Bank the finished day and put up the progression board.
+   *
+   * Separate from `completeDay` so the caller can run the shift-end quiz first —
+   * the boosts must be earned before the day is recorded, because `recordDay` is
+   * what banks them against the correct day.
+   */
+  finishDay(): { passed: boolean; dayNumber: number } | null {
+    // The quiz may still be up — it is administered during Review, and a player
+    // can file the record without dismissing it. Take it down first or it draws
+    // over the progression board.
+    this.quiz.close();
+    const result = this.completeDay();
+    if (result) this.showProgression(true);
+    return result;
   }
 
   /**
@@ -312,7 +414,7 @@ export class ShiftSession {
    */
   endReview(): void {
     if (this.phase !== 'Review') return;
-    this.quiz.open(this.director.day, this.quizRng, 3);
+    this.quiz.open(this._campaign.day, this.quizRng, 3);
     this.phase = 'EndOfDay';
     this.applyPhaseVisibility();
     this.onStateChange();
@@ -352,6 +454,16 @@ export class ShiftSession {
 
   get quizOpen(): boolean {
     return this.quiz.isOpen;
+  }
+
+  /** True when a question is answered and waiting to be dismissed. */
+  get quizAwaitingAdvance(): boolean {
+    return this.quiz.awaitingAdvance;
+  }
+
+  /** The question currently on the board, for inspection and for tests. */
+  get currentQuestion(): QuizQuestion | null {
+    return this.quiz.currentQuestion;
   }
 
   get boosts(): number {
@@ -646,12 +758,20 @@ export class ShiftSession {
 
   private applyPhaseVisibility(): void {
     const inspecting = this.phase === 'Inspection';
-    const paperwork = this.phase === 'Briefing' || this.phase === 'Debrief' || this.phase === 'Complete';
+    const paperwork =
+      this.phase === 'Progression' ||
+      this.phase === 'Briefing' ||
+      this.phase === 'Debrief' ||
+      this.phase === 'Complete';
     this.briefing.setVisible(this.phase === 'Briefing');
     this.debrief.setVisible(this.phase === 'Debrief' || this.phase === 'Complete');
+    void paperwork;
     this.stage.setVisible(inspecting);
     this.traveler.setVisible(inspecting || this.phase === 'Break');
     this.cluster.setVisible(inspecting);
+    // The progression board only belongs on-stage during the Progression phase;
+    // the debrief has its own board on the same wall.
+    if (this.phase !== 'Progression') this.progression.setVisible(false);
     this.stamps.setVisible(inspecting || this.phase === 'Break');
     this.crossDial.mesh.setEnabled(inspecting);
     this.glossary.setVisible(this.glossary.isOpen && inspecting);
@@ -666,6 +786,7 @@ export class ShiftSession {
   update(dt: number): void {
     this.elapsedSeconds += dt;
     this.quiz.update();
+    this.progression.update();
     this.glossary.setVisible(this.glossary.isOpen && this.phase !== 'Briefing');
     if (this.phase === 'Inspection') {
       this.shiftSeconds += dt;
@@ -723,5 +844,16 @@ export class ShiftSession {
   }
   get salary(): number {
     return this.director.metrics.totals.salaryTotal;
+  }
+  /** Whether the progression board is currently on the wall. */
+  get progressionVisible(): boolean {
+    return this.progression.isVisible;
+  }
+
+  get dayNumber(): number {
+    return this.campaign.dayNumber;
+  }
+  get certified(): boolean {
+    return this.campaign.isCertified;
   }
 }
