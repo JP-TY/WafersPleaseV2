@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "skills": {
+    "Blender": {
+      "source": "sfkislev/flue",
+      "sourceType": "github",
+      "skillPath": "skills/blender/SKILL.md",
+      "computedHash": "ad8c24c7c69274b4f3dff649f5f74e01aec4c59bace0fa68d8a1a6c6fbd0288d"
+    },
+    "blender-web-pipeline": {
+      "source": "freshtechbro/claudedesignskills",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/blender-web-pipeline/SKILL.md",
+      "computedHash": "342295a1d79b24a1e8ff4c048da51b9a1dc22d9c01dea183af389c0e4a1297e6"
+    },
+    "game-development": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/game-development/SKILL.md",
+      "computedHash": "a5a1b37d86be11134798abc1558f964ca4fc538fc56ac661f779a90a54e338ca"
+    },
+    "unity": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "skillPath": "unity/SKILL.md",
+      "computedHash": "36e14428f3e5416cda76073a5af3d427ec555c77fbd22eb771ad2f0efe8f45da"
+    },
+    "unity-developer": {
+      "source": "rmyndharis/antigravity-skills",
+      "sourceType": "github",
+      "skillPath": "skills/unity-developer/SKILL.md",
+      "computedHash": "aeddf907a1d832b6daca18f0b36fd860152ee4ca09ea482e67c146cfecf02411"
+    },
+    "unity-ecs-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "skillPath": "plugins/game-development/skills/unity-ecs-patterns/SKILL.md",
+      "computedHash": "e54a4f529fada156d3d82e42dcfc76674913eea9fb0bb292ca0323f8866c6ce9"
+    }
+  }
+}

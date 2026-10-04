@@ -1,0 +1,39 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a728d13850c78451e46d8d85e3c14cf7, type: 3}
+  m_Name: Day1_Training
+  m_EditorClassIdentifier: Assembly-CSharp::WafersPlease.Config.DayConfigSO
+  dayNumber: 1
+  briefingText: 'DAY 1 - THE SILICON FOUNDATION (Training)
+
+    Focus: substrate geometry and early cleaning protocols.
+
+    Defects in play: Bowing and Warping, Substrate Contamination.
+
+    Tools unlocked: Stylus Profilometer, Four-Point Probe.
+
+    Bowed wafers can never be saved - REJECT them. Contaminated wafers clean up
+    at the wet bench - REWORK them. Clean wafers pass - ACCEPT.
+
+    Tolerances are generous today. Accuracy matters more than speed.'
+  timeLimitMinutes: 8
+  wafersPerDay: 5
+  salaryTarget: 500
+  competencyTarget: 70
+  allowedDefects:
+  - {fileID: 11400000, guid: 5564d3885b6a65ebe2bcbfc27b741aae, type: 2}
+  - {fileID: 11400000, guid: 6e8678ebeaf834225de5dbaa2fcd31b9, type: 2}
+  availableTools:
+  - 0
+  - 4
+  defectDensity: 0.7
+  showContextPrompts: 1

@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3f985818f1aba93b8a9895c077a4e54f, type: 3}
+  m_Name: STI_Void
+  m_EditorClassIdentifier: Assembly-CSharp::WafersPlease.Config.DefectProfileSO
+  displayName: STI Void / Seam
+  defectClass: 1
+  defectType: 1
+  detectionDifficulty: 1
+  requiredTool: 1
+  defaultAction: 1
+  reworkAction: 2
+  severity: 0.8
+  toleranceThreshold: 0.15
+  diagnosticIndicators:
+  - Internal center-line trench gap
+  - Low thin-film optical density band
+  - Inter-device current leakage
+  glossaryEntry: 'Shallow-trench-isolation fill failure leaves a sub-surface seam that
+    leaks current between devices. Cannot be chemically extracted: reject / scrap.'
+  remediationReferences:
+  - GDD Section 6 - Shallow Trench Isolation (STI)

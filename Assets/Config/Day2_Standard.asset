@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a728d13850c78451e46d8d85e3c14cf7, type: 3}
+  m_Name: Day2_Standard
+  m_EditorClassIdentifier: Assembly-CSharp::WafersPlease.Config.DayConfigSO
+  dayNumber: 2
+  briefingText: 'DAY 2 - BREAKING THE LEAKAGE BARRIER (Gate Stack)
+
+    Focus: the shift to high-K metal gates and ALD deployment.
+
+    Defects in play: Interface Traps / Roughness, STI Voids.
+
+    Tools unlocked: Spectroscopic Ellipsometry, X-Ray Refractometry.
+
+    Strict parametric speed evaluations are in force. Rough interfaces bleed
+    mobility and fail baseline speed - REJECT. STI seams leak between devices
+    and cannot be extracted - REJECT / SCRAP. Clean wafers pass - ACCEPT.'
+  timeLimitMinutes: 10
+  wafersPerDay: 8
+  salaryTarget: 900
+  competencyTarget: 70
+  allowedDefects:
+  - {fileID: 11400000, guid: 6533f0e5c627ecf6ed63869a2eee5f1d, type: 2}
+  - {fileID: 11400000, guid: 6c5295dff94ac7ea0fdfcc04632adb4f, type: 2}
+  availableTools:
+  - 1
+  - 2
+  defectDensity: 0.4
+  showContextPrompts: 1
