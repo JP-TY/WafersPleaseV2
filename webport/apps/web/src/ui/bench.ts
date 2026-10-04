@@ -47,8 +47,9 @@ export function mountClipboard(scene: Scene, name: string, panel: Panel, w: numb
   const tilt = new TransformNode(`${name}-tilt`, scene);
   tilt.parent = root;
   tilt.position = new Vector3(0, BENCH_Y + 0.02, 0);
-  // Canted back so it faces an operator looking slightly down at the bench.
-  tilt.rotation.x = -0.34;
+  // Positive: the top edge tips TOWARD the operator, so the sheet faces up and
+  // out of the bench. Negative pointed the normal down and away from the player.
+  tilt.rotation.x = 0.34;
 
   const frame = CreateBox(`${name}-bezel`, { width: w + 0.03, height: h + 0.03, depth: 0.018 }, scene);
   frame.parent = tilt;
@@ -64,7 +65,7 @@ export function mountClipboard(scene: Scene, name: string, panel: Panel, w: numb
     const leg = CreateBox(`${name}-leg-${sx}`, { width: 0.018, height: 0.14, depth: 0.018 }, scene);
     leg.parent = root;
     leg.position = new Vector3(sx * (w / 2 - 0.035), BENCH_Y - 0.05, 0.05);
-    leg.rotation.x = -0.34;
+    leg.rotation.x = 0.34;
     leg.material = matte(scene, `${name}-leg-mat-${sx}`, new Color3(0.2, 0.21, 0.24), 0.24);
   }
 

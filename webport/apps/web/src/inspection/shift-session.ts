@@ -38,6 +38,7 @@ import {
   type PlayerAction,
   type WaferEvidence,
 } from '@wafers/sim';
+import { Rng } from '@wafers/sim';
 import type { DayConfig, DefectProfile, RuleMatrix, ScoringConfig, ToolConfig, ToolType } from '@wafers/data';
 
 import { WaferStage } from './wafer-stage.js';
@@ -45,6 +46,7 @@ import { TravelerView } from './traveler-view.js';
 import { ClusterView } from './cluster-view.js';
 import { StampBank } from './stamp-bank.js';
 import { BriefingView, DebriefView } from './boards.js';
+import { QuizBoard, GlossaryTablet } from './scaffolding.js';
 import { matte } from '../scene.js';
 
 export interface ShiftConfig {
@@ -92,6 +94,14 @@ export class ShiftSession {
   private readonly stamps: StampBank;
   private readonly briefing: BriefingView;
   private readonly debrief: DebriefView;
+  private readonly quiz: QuizBoard;
+  private readonly glossary: GlossaryTablet;
+  /**
+   * Permanent competency boosts earned from the GDD §12 shift-end quiz.
+   * Accumulated across days, never spent — the GDD calls them "permanent
+   * competency rating boosts", so they must survive a shift boundary.
+   */
+  private competencyBoosts = 0;
   private readonly crossDial: { mesh: import('@babylonjs/core/Meshes/abstractMesh.js').AbstractMesh };
 
   /** Tools available today (GDD §9 gates the roster per day). */
@@ -105,6 +115,7 @@ export class ShiftSession {
   private toolsRunThisWafer: ToolType[] = [];
   private waferStartTime = 0;
 
+  private readonly quizRng: Rng;
   private phase: ShiftPhase = 'Briefing';
   /** Wafer presented during a break, held back until the player resumes. */
   private pendingWafer: import('@wafers/sim').WaferPresentation | null = null;
@@ -138,12 +149,23 @@ export class ShiftSession {
       seed: cfg.seed,
     });
 
+    // Forked off the shift seed, NOT shared with the lot. Drawing quiz questions
+    // must not perturb the metrology rolls, or taking the quiz would change the
+    // wafers and break GDD §16 replay.
+    this.quizRng = new Rng(cfg.seed ^ 0x5eed);
+
     this.stage = new WaferStage(scene);
     this.traveler = new TravelerView(scene);
     this.cluster = new ClusterView(scene);
     this.stamps = new StampBank(scene);
     this.briefing = new BriefingView(scene);
     this.debrief = new DebriefView(scene);
+    this.quiz = new QuizBoard(scene);
+    this.glossary = new GlossaryTablet(scene);
+    this.quiz.onAnswer = (_r, pool) => {
+      this.competencyBoosts = pool;
+      this.onStateChange();
+    };
     this.crossDial = { mesh: this.buildCrossDial(scene) };
 
     this.traveler.setShiftContext(cfg.day, cfg.rules, cfg.defects);
@@ -280,12 +302,86 @@ export class ShiftSession {
     this.onStateChange();
   }
 
-  /** GDD §5: Review -> EndOfDay. */
+  /**
+   * GDD §5: Review -> EndOfDay.
+   *
+   * Opens the §12 shift-end micro-quiz on the way through. It is offered rather
+   * than forced: the GDD says "optional", and forcing it would punish a player
+   * who just wants to finish the shift. It sits between review and end-of-day
+   * because that is where a supervisor would administer it.
+   */
   endReview(): void {
     if (this.phase !== 'Review') return;
+    this.quiz.open(this.director.day, this.quizRng, 3);
     this.phase = 'EndOfDay';
     this.applyPhaseVisibility();
     this.onStateChange();
+  }
+
+  /** Dismiss the quiz board. */
+  closeQuiz(): void {
+    this.quiz.close();
+    this.applyPhaseVisibility();
+    this.onStateChange();
+  }
+
+  /**
+   * Pick a quiz option. Returns false when no quiz is open or the current
+   * question was already answered.
+   */
+  answerQuiz(optionIndex: number): boolean {
+    if (!this.quiz.isOpen) return false;
+    const ok = this.quiz.choose(optionIndex);
+    if (ok) this.onStateChange();
+    return ok;
+  }
+
+  /**
+   * Move past the explanation. Returns true while the quiz is still running, so
+   * the caller can keep clicking without re-querying.
+   */
+  nextQuiz(): boolean {
+    if (!this.quiz.isOpen) return false;
+    const more = this.quiz.advance();
+    if (!more) {
+      this.applyPhaseVisibility();
+      this.onStateChange();
+    }
+    return more;
+  }
+
+  get quizOpen(): boolean {
+    return this.quiz.isOpen;
+  }
+
+  get boosts(): number {
+    return this.competencyBoosts;
+  }
+
+  /**
+   * The GDD §12 glossary tablet, toggled with G.
+   *
+   * Available during Inspection because that is when a player actually needs it:
+   * mid-wafer, deciding whether a reading makes sense. Reference material opened
+   * only at the end of a shift is no use.
+   */
+  toggleGlossary(): boolean {
+    this.glossary.setVisible(!this.glossary.isOpen);
+    return this.glossary.isOpen;
+  }
+
+  get glossaryOpen(): boolean {
+    return this.glossary.isOpen;
+  }
+
+  /** Cycle the tablet's cross-section diagram. */
+  pageGlossary(): void {
+    if (this.glossary.isOpen) this.glossary.next();
+  }
+
+  /** Peel one layer off the current cross-section. */
+  peelGlossary(): void {
+    if (this.glossary.isOpen) this.glossary.peel();
   }
 
   // -------------------------------------------------------------------------
@@ -337,6 +433,31 @@ export class ShiftSession {
     // Stamp hotkeys for keyboard-only play. The physical stamps remain the
     // primary interaction (GDD §4 "mechanical mouse clicks"), these are the
     // accessibility path.
+    if (e.key === 'g' || e.key === 'G') {
+      e.preventDefault();
+      this.toggleGlossary();
+      return;
+    }
+    if (e.key === 'n' || e.key === 'N') {
+      e.preventDefault();
+      this.pageGlossary();
+      return;
+    }
+    if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault();
+      this.peelGlossary();
+      return;
+    }
+    if (e.key === 'Escape') {
+      if (this.quizOpen) {
+        e.preventDefault();
+        this.closeQuiz();
+      } else if (this.glossaryOpen) {
+        e.preventDefault();
+        this.toggleGlossary();
+      }
+      return;
+    }
     const stamp: Record<string, PlayerAction> = { a: 'Accept', r: 'Reject', w: 'Rework' };
     const act = stamp[e.key.toLowerCase()];
     if (act) {
@@ -533,6 +654,7 @@ export class ShiftSession {
     this.cluster.setVisible(inspecting);
     this.stamps.setVisible(inspecting || this.phase === 'Break');
     this.crossDial.mesh.setEnabled(inspecting);
+    this.glossary.setVisible(this.glossary.isOpen && inspecting);
     // The wafer stage is hidden while paperwork is up, but the cluster rack and
     // traveler must not be left floating with no bench context, so keep the
     // wafer stage visible on Break only.
@@ -543,6 +665,8 @@ export class ShiftSession {
 
   update(dt: number): void {
     this.elapsedSeconds += dt;
+    this.quiz.update();
+    this.glossary.setVisible(this.glossary.isOpen && this.phase !== 'Briefing');
     if (this.phase === 'Inspection') {
       this.shiftSeconds += dt;
       // GDD §12 cross-illumination: sweep slowly if the player leaves it alone,

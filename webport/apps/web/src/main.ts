@@ -179,11 +179,18 @@ function syncHud(): void {
     hud.appendChild(go);
   }
   if (phase === 'EndOfDay') {
-    const go = document.createElement('button');
-    go.className = 'primary';
-    go.textContent = 'END OF DAY — PRINT DIAGNOSTIC SHEET';
-    go.onclick = () => session.openDebrief();
-    hud.appendChild(go);
+    if (session.quizOpen) {
+      const q = document.createElement('div');
+      q.className = 'tag rework';
+      q.textContent = 'SHIFT-END REVIEW — answer on the board';
+      hud.appendChild(q);
+    } else {
+      const go = document.createElement('button');
+      go.className = 'primary';
+      go.textContent = 'END OF DAY — PRINT DIAGNOSTIC SHEET';
+      go.onclick = () => session.openDebrief();
+      hud.appendChild(go);
+    }
   }
   if (session.debriefComplete) {
     const again = document.createElement('button');
@@ -195,12 +202,15 @@ function syncHud(): void {
 
   const meta = document.createElement('div');
   meta.className = 'meta';
-  meta.textContent = `day ${day.dayNumber} · seed ${run.seed}${run.substituted ? ' (zero substituted)' : ''} · seedHash ${stableHash(String(run.seed))}`;
+  const boosts = session.boosts > 0 ? ` · competency +${session.boosts}` : '';
+  meta.textContent =
+    `day ${day.dayNumber} · seed ${run.seed}${run.substituted ? ' (zero substituted)' : ''}` +
+    ` · seedHash ${stableHash(String(run.seed))}${boosts} · G glossary  N next  P peel`;
   hud.appendChild(meta);
 }
 
 session.onStateChange = () => {
-  frameWorkspace(camera, { phase: session.currentPhase });
+  frameWorkspace(camera, { phase: session.currentPhase, quizOpen: session.quizOpen });
   syncHud();
 };
 session.onStateChange();
@@ -220,6 +230,10 @@ session.onStateChange();
   stamp: (a: string) => session.commitStamp(a as never),
   openDebrief: () => session.openDebrief(),
   closeRework: (ok: boolean, opts?: { armCmpBrake?: boolean }) => session.closeReworkBench(ok, opts),
+  closeQuiz: () => session.closeQuiz(),
+  answerQuiz: (i: number) => session.answerQuiz(i),
+  nextQuiz: () => session.nextQuiz(),
+  glossary: () => session.toggleGlossary(),
 };
 
 // Fixed timestep so the physics does not depend on frame rate — required for

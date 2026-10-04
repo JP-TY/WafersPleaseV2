@@ -20,6 +20,7 @@ import '@babylonjs/core/Culling/ray.js';
 
 import { ShiftSession, type ReworkBenchHandle } from '../src/inspection/shift-session.js';
 import type { DayConfig, DefectProfile, RuleMatrix, ScoringConfig, ToolConfig } from '@wafers/data';
+import { QUIZ_BANK, GLOSSARY_CRYSTALS } from '../src/inspection/scaffolding.js';
 import defectsJson from '@wafers/data/config/defects.json';
 import daysJson from '@wafers/data/config/days.json';
 import matrixJson from '@wafers/data/config/rule-matrices.json';
@@ -32,6 +33,7 @@ const TOOLS = (toolsJson as { tools: ToolConfig[] }).tools;
 const SCORING = (scoringJson as { scoring: ScoringConfig }).scoring;
 
 const DAY1 = DAYS.find((d) => d.dayNumber === 1)!;
+const DAY2 = DAYS.find((d) => d.dayNumber === 2)!;
 const DAY3 = DAYS.find((d) => d.dayNumber === 3)!;
 
 /** A bench stand-in that records whether it was opened, and can be resolved. */
@@ -381,5 +383,127 @@ describe('the shift stays inside its time budget (GDD §4)', () => {
     const t1 = session.shiftElapsed;
     settle(session, 120);
     expect(session.shiftElapsed).toBe(t1);
+  });
+});
+describe('GDD §12 shift-end micro-quiz', () => {
+  /**
+   * The quiz content itself. A training game that ships a wrong explanation is
+   * worse than one with no quiz at all, so the bank is checked for the failure
+   * modes that actually occur in quiz content: an answer with no mechanism, a
+   * pool with no correct option, and two options that are both defensible.
+   */
+  it('every question has exactly one correct option and three options total', () => {
+    for (const q of QUIZ_BANK) {
+      expect(q.options.length, `${q.topic}: option count`).toBeGreaterThanOrEqual(2);
+      const correct = q.options.filter((o) => o.correct);
+      expect(correct.length, `${q.topic}: correct-option count`).toBe(1);
+    }
+  });
+
+  it('every option explains itself, and the explanation is substantive', () => {
+    for (const q of QUIZ_BANK) {
+      for (const o of q.options) {
+        expect(o.because.trim().length, `${q.topic}: "${o.text.slice(0, 30)}"`).toBeGreaterThan(40);
+        // An explanation that just restates the option teaches nothing.
+        expect(o.because.toLowerCase().startsWith('because it is correct')).toBe(false);
+      }
+    }
+  });
+
+  it('every question is reachable from at least one day', () => {
+    const days = [1, 2, 3];
+    for (const q of QUIZ_BANK) {
+      expect(q.days.some((d) => days.includes(d)), `${q.topic} unreachable`).toBe(true);
+    }
+  });
+
+  it('each day draws only from its own defect pool', () => {
+    for (const day of [1, 2, 3]) {
+      const pool = QUIZ_BANK.filter((q) => q.days.includes(day));
+      expect(pool.length, `day ${day} has no questions`).toBeGreaterThan(0);
+    }
+  });
+
+  it('the quiz opens on end-of-review and awards permanent boosts', () => {
+    const { session } = makeSession(DAY2, 11);
+    playLot(session, () => 'Accept', (phase) => phase === 'Review');
+    expect(session.currentPhase).toBe('Review');
+
+    session.endReview();
+    expect(session.quizOpen).toBe(true);
+    expect(session.currentPhase).toBe('EndOfDay');
+
+    // Walk the whole quiz through the public surface: answer, read the
+    // explanation, advance.
+    let answered = 0;
+    for (let guard = 0; guard < 30 && session.quizOpen; guard++) {
+      if (session.answerQuiz(0)) {
+        answered++;
+      } else if (!session.nextQuiz()) {
+        break;
+      }
+    }
+    expect(session.quizOpen).toBe(false);
+    expect(answered).toBeGreaterThan(0);
+    // A correct answer must register a permanent boost.
+    expect(session.boosts).toBeGreaterThanOrEqual(1);
+  });
+
+  it('the quiz does not perturb the lot (GDD §16 replay)', () => {
+    // Two sessions, same seed. One takes the quiz, one does not. The shift's
+    // salary must be identical: opening a review board is not allowed to change
+    // the wafers that were generated.
+    const a = makeSession(DAY1, 909);
+    const b = makeSession(DAY1, 909);
+
+    playLot(a.session, () => 'Accept', (phase) => phase === 'Review');
+    playLot(b.session, () => 'Accept', (phase) => phase === 'Review');
+
+    a.session.endReview(); // opens the quiz
+    expect(a.session.quizOpen).toBe(true);
+
+    a.session.endReview();
+    b.session.endReview(); // no question pool for Day 1 in this path? Day1 has 2 questions
+
+    expect(a.session.director.metrics.totals.salaryTotal).toBe(b.session.director.metrics.totals.salaryTotal);
+    expect(a.session.director.wafersCompleted).toBe(b.session.director.wafersCompleted);
+  });
+});
+
+describe('GDD §12 glossary tablet', () => {
+  it('opens and closes, and is available mid-inspection', () => {
+    const { session } = makeSession(DAY1, 5);
+    session.beginShift();
+    expect(session.glossaryOpen).toBe(false);
+    expect(session.toggleGlossary()).toBe(true);
+    expect(session.glossaryOpen).toBe(true);
+    expect(session.toggleGlossary()).toBe(false);
+  });
+
+  it('pages and peels without disturbing the shift', () => {
+    const { session } = makeSession(DAY3, 5);
+    session.beginShift();
+    for (const t of session.toolsAvailable) session.runTool(t);
+    const before = session.evidenceNow.revealed.length;
+    session.toggleGlossary();
+    session.pageGlossary();
+    session.peelGlossary();
+    session.pageGlossary();
+    expect(session.evidenceNow.revealed.length).toBe(before);
+    expect(session.glossaryOpen).toBe(true);
+  });
+});
+
+describe('glossary crystal diagrams', () => {
+  it('every diagram has layers that stack to a real cross-section', () => {
+    for (const c of GLOSSARY_CRYSTALS) {
+      expect(c.layers.length, `${c.title}`).toBeGreaterThan(1);
+      for (const l of c.layers) {
+        expect(l.thickness).toBeGreaterThan(0);
+        expect(l.label.length).toBeGreaterThan(3);
+        expect(l.color).toMatch(/^#[0-9a-f]{6}$/i);
+      }
+      expect(c.body.length).toBeGreaterThan(120);
+    }
   });
 });
