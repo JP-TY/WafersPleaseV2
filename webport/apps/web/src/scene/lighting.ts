@@ -72,16 +72,16 @@ function paintFace(face: number): Uint8Array {
       const u = x / (FACE_SIZE - 1);
 
       // Base room gradient.
-      let r = 16 + v * 78;
-      let g = 19 + v * 84;
-      let b = 24 + v * 94;
+      let r = 34 + v * 104;
+      let g = 39 + v * 112;
+      let b = 47 + v * 124;
 
       if (face === 2) {
         // Ceiling: a darker plenum with four troffer strips. The gaps matter
         // more than the strips — they are what a mirror reflects as structure.
-        r = 62;
-        g = 68;
-        b = 78;
+        r = 96;
+        g = 104;
+        b = 118;
         const strip =
           Math.abs(u - 0.16) < 0.036 ||
           Math.abs(u - 0.39) < 0.036 ||
@@ -132,7 +132,7 @@ export function installEnvironment(scene: Scene): RawCubeTexture {
   // tone-mapped or it flattens out.
   tex.gammaSpace = true;
   scene.environmentTexture = tex;
-  scene.environmentIntensity = 1.0;
+  scene.environmentIntensity = 1.45;
   return tex;
 }
 
@@ -152,13 +152,13 @@ export interface Lighting {
  */
 export function installLighting(scene: Scene): Lighting {
   const fill = new HemisphericLight('fill', new Vector3(0, 1, 0), scene);
-  fill.intensity = 0.42;
-  fill.diffuse = new Color3(0.72, 0.8, 0.92);
-  fill.groundColor = new Color3(0.1, 0.11, 0.13);
+  fill.intensity = 0.95;
+  fill.diffuse = new Color3(0.84, 0.89, 0.97);
+  fill.groundColor = new Color3(0.26, 0.28, 0.32);
 
   const key = new DirectionalLight('key', new Vector3(-0.42, -0.86, 0.3), scene);
   key.position = new Vector3(2.6, 4.2, -1.6);
-  key.intensity = 2.4;
+  key.intensity = 2.9;
   key.diffuse = new Color3(1, 0.98, 0.94);
 
   // 512 is plenty for a bench-sized scene and halves the shadow cost; the
@@ -180,6 +180,23 @@ export function installLighting(scene: Scene): Lighting {
  * variation texture rather than real anisotropy, which keeps the material cost
  * the same as any other PBR material and avoids a shader variant.
  */
+/**
+ * Matte dielectric. Use this for anything the player has to be able to SEE.
+ *
+ * A polished metal reflects the environment, so a bright light aimed at it changes
+ * nothing and it still renders black when there is nothing bright to reflect — the
+ * rim of an open bath did exactly that. A dielectric responds to the lights.
+ */
+export function matte(scene: Scene, name: string, color: Color3, specular = 0.04): PBRMaterial {
+  const m = new PBRMaterial(name, scene);
+  m.albedoColor = color;
+  m.metallic = 0;
+  m.roughness = 0.62;
+  m.specularIntensity = specular * 12;
+  m.environmentIntensity = 0.9;
+  return m;
+}
+
 export function steel(scene: Scene, name: string, tint = '#8f97a3'): PBRMaterial {
   const m = new PBRMaterial(name, scene);
   m.albedoColor = Color3.FromHexString(tint);

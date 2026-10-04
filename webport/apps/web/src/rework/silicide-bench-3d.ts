@@ -57,8 +57,12 @@ import {
 const W = 880;
 const H = 420;
 
-const TANK_R = 0.13;
-const TANK_H = 0.2;
+/**
+ * The bath must be wider than the 300 mm wafer it strips. A 260 mm bath cannot
+ * take one, so the original size was both unreadable and physically wrong.
+ */
+const TANK_R = 0.2;
+const TANK_H = 0.26;
 
 /** NH4OH:H2O2:H2O — the alkaline peroxide bath selective for titanium. */
 const ETCHANT = '#c8d98a';
@@ -215,19 +219,19 @@ export class SilicideBench3D {
     this.root.position = new Vector3(0, BENCH_Y, 0);
 
     // --- deck ---------------------------------------------------------------
-    const deck = CreateBox('sil-deck', { width: 0.9, height: 0.035, depth: 0.4 }, scene);
+    const deck = CreateBox('sil-deck', { width: 1.25, height: 0.035, depth: 0.5 }, scene);
     deck.parent = this.root;
     deck.position = new Vector3(0, 0, 0);
     deck.material = steel(scene, 'sil-deck-mat', '#79828f');
-    for (const z of [0.2, -0.2]) {
-      const lip = CreateBox('sil-deck-lip', { width: 0.92, height: 0.045, depth: 0.012 }, scene);
+    for (const z of [0.25, -0.25]) {
+      const lip = CreateBox('sil-deck-lip', { width: 1.27, height: 0.045, depth: 0.014 }, scene);
       lip.parent = this.root;
       lip.position = new Vector3(0, 0.008, z);
       lip.material = steel(scene, 'sil-deck-lip-mat', '#98a2ae');
     }
 
     // --- ultrasonic bath ----------------------------------------------------
-    const bathX = -0.2;
+    const bathX = -0.3;
     const wallMat = new PBRMaterial('sil-bath-wall-mat', scene);
     wallMat.albedoColor = new Color3(0.84, 0.88, 0.92);
     wallMat.metallic = 0;
@@ -286,20 +290,20 @@ export class SilicideBench3D {
     const armMat = steel(scene, 'sil-arm-mat', '#c2ccd8');
     const arm = CreateBox('sil-arm', { width: 0.03, height: 0.008, depth: 0.3 }, scene);
     arm.parent = this.holder;
-    arm.position = new Vector3(bathX, 0.23, 0.12);
+    arm.position = new Vector3(bathX, 0.3, 0.16);
     arm.material = armMat;
-    const post = CreateCylinder('sil-post', { diameter: 0.016, height: 0.24, tessellation: 12 }, scene);
+    const post = CreateCylinder('sil-post', { diameter: 0.018, height: 0.34, tessellation: 12 }, scene);
     post.parent = this.holder;
-    post.position = new Vector3(bathX + 0.02, 0.13, 0.24);
+    post.position = new Vector3(bathX + 0.03, 0.17, 0.3);
     post.material = armMat;
-    const cross = CreateBox('sil-cross', { width: 0.014, height: 0.008, depth: 0.22 }, scene);
+    const cross = CreateBox('sil-cross', { width: 0.016, height: 0.01, depth: 0.3 }, scene);
     cross.parent = this.holder;
-    cross.position = new Vector3(bathX, 0.215, 0.02);
+    cross.position = new Vector3(bathX, 0.285, 0.03);
     cross.material = armMat;
 
     const wafer = CreateCylinder('sil-wafer', { diameter: WAFER_RADIUS * 2, height: 0.0008, tessellation: 48 }, scene);
     wafer.parent = this.holder;
-    wafer.position = new Vector3(bathX, 0.206, 0);
+    wafer.position = new Vector3(bathX, 0.275, 0);
     const waferMat = new PBRMaterial('sil-wafer-mat', scene);
     waferMat.albedoColor = new Color3(0.12, 0.13, 0.16);
     waferMat.metallic = 0.68;
@@ -313,18 +317,18 @@ export class SilicideBench3D {
     this.probe.parent = this.root;
     const probeMat = steel(scene, 'sil-probe-mat', '#d0dae6');
     for (const dz of [-0.05, 0.05]) {
-      const pin = CreateCylinder('sil-probe-pin', { diameter: 0.004, height: 0.06, tessellation: 8 }, scene);
+      const pin = CreateCylinder('sil-probe-pin', { diameter: 0.005, height: 0.07, tessellation: 8 }, scene);
       pin.parent = this.probe;
-      pin.position = new Vector3(bathX, 0.235, dz);
+      pin.position = new Vector3(bathX, 0.3, dz);
       pin.material = probeMat;
     }
-    const probeBar = CreateBox('sil-probe-bar', { width: 0.02, height: 0.01, depth: 0.14 }, scene);
+    const probeBar = CreateBox('sil-probe-bar', { width: 0.024, height: 0.012, depth: 0.18 }, scene);
     probeBar.parent = this.probe;
-    probeBar.position = new Vector3(bathX, 0.262, 0);
+    probeBar.position = new Vector3(bathX, 0.332, 0);
     probeBar.material = probeMat;
 
     // --- sweep dial ---------------------------------------------------------
-    this.dial = new SweepDial(scene, this.root, 'sil-dial', new Vector3(0.22, 0.2, 0.02));
+    this.dial = new SweepDial(scene, this.root, 'sil-dial', new Vector3(0.34, 0.26, 0.02));
 
     // --- contact thickness gauge -------------------------------------------
     // The over-wash failure mode: the Ti contact thins and its resistance climbs.
@@ -335,19 +339,19 @@ export class SilicideBench3D {
     this.contactGaugeMat.emissiveTexture = gaugeTex;
     this.contactGaugeMat.emissiveColor = new Color3(0.85, 0.85, 0.85);
     this.contactGaugeMat.disableLighting = true;
-    const gaugeFace = CreatePlane('sil-gauge-face', { width: 0.17, height: 0.05 }, scene);
+    const gaugeFace = CreatePlane('sil-gauge-face', { width: 0.21, height: 0.062 }, scene);
     gaugeFace.material = this.contactGaugeMat;
     gaugeFace.parent = this.root;
-    gaugeFace.position = new Vector3(0.22, 0.075, 0.163);
+    gaugeFace.position = new Vector3(0.34, 0.09, 0.2);
     gaugeFace.rotation.x = -0.5;
-    const gaugeCase = CreateBox('sil-gauge-case', { width: 0.19, height: 0.07, depth: 0.03 }, scene);
+    const gaugeCase = CreateBox('sil-gauge-case', { width: 0.23, height: 0.085, depth: 0.035 }, scene);
     gaugeCase.parent = this.root;
-    gaugeCase.position = new Vector3(0.22, 0.06, 0.175);
+    gaugeCase.position = new Vector3(0.34, 0.07, 0.215);
     gaugeCase.material = housing(scene, 'sil-gauge-case-mat', '#2b303a');
 
     // --- controls -----------------------------------------------------------
-    this.run = pushButton(scene, this.root, 'sil-wash', new Vector3(0.22, 0.02, -0.14), { width: 0.09, height: 0.03 });
-    const telltale = telltales(scene, this.root, 'sil-lamps', new Vector3(0.3, 0.02, -0.14), [
+    this.run = pushButton(scene, this.root, 'sil-wash', new Vector3(0.34, 0.02, -0.2), { width: 0.11, height: 0.036 });
+    const telltale = telltales(scene, this.root, 'sil-lamps', new Vector3(0.45, 0.02, -0.2), [
       { label: 'US', colour: '#5ec8d8' },
     ]);
     this.washLamp = (on: boolean) => telltale.set(0, on);
@@ -356,11 +360,11 @@ export class SilicideBench3D {
     const lampArmMat = steel(scene, 'sil-lamp-arm-mat', '#8f99a5');
     const baseDisc = CreateCylinder('sil-lamp-base', { diameter: 0.05, height: 0.014, tessellation: 20 }, scene);
     baseDisc.parent = this.root;
-    baseDisc.position = new Vector3(-0.02, 0.008, -0.17);
+    baseDisc.position = new Vector3(0.02, 0.008, -0.24);
     baseDisc.material = lampArmMat;
     const gooseneck = CreateCylinder('sil-lamp-neck', { diameter: 0.01, height: 0.3, tessellation: 10 }, scene);
     gooseneck.parent = this.root;
-    gooseneck.position = new Vector3(-0.02, 0.16, -0.17);
+    gooseneck.position = new Vector3(0.02, 0.2, -0.24);
     gooseneck.material = lampArmMat;
     const shade = CreateCylinder(
       'sil-lamp-shade',
@@ -368,7 +372,7 @@ export class SilicideBench3D {
       scene,
     );
     shade.parent = this.root;
-    shade.position = new Vector3(-0.02, 0.31, -0.15);
+    shade.position = new Vector3(0.02, 0.4, -0.2);
     shade.rotation.x = 0.9;
     shade.material = housing(scene, 'sil-lamp-shade-mat', '#2b303a');
     const bulb = new SpotLight('sil-task-lamp', Vector3.Zero(), Vector3.Up(), 2.1, 2, scene);
@@ -378,16 +382,16 @@ export class SilicideBench3D {
     // so without this its position is WORLD space and the lamp ends up on the
     // floor beneath the bench.
     bulb.parent = this.root;
-    bulb.position = new Vector3(-0.02, 0.3, -0.13);
+    bulb.position = new Vector3(0.02, 0.39, -0.18);
     bulb.direction = new Vector3(0, -0.5, 0.86).normalize();
 
-    nameplate(scene, this.root, 'sil-nameplate', 'SELECTIVE SILICIDE WET ETCH  ·  NH4OH:H2O2:H2O', 0.4, new Vector3(0, 0.022, 0.208));
-    screws(scene, this.root, 'sil-screw', 0.4, 0.17, 0.024, 4);
+    nameplate(scene, this.root, 'sil-nameplate', 'SELECTIVE SILICIDE WET ETCH  ·  NH4OH:H2O2:H2O', 0.5, new Vector3(0, 0.022, 0.262));
+    screws(scene, this.root, 'sil-screw', 0.55, 0.21, 0.024, 4);
 
     // --- instrument readout --------------------------------------------------
     this.panel = new Panel('sil-readout', { width: W, height: H, scale: 1.5 });
     this.readout = mountBench(scene, 'sil-readout', this.panel);
-    this.readout.root.position = new Vector3(0, 0, -0.3);
+    this.readout.root.position = new Vector3(0, 0, -0.4);
 
     this.bindInput(scene);
   }
@@ -421,10 +425,10 @@ export class SilicideBench3D {
   frameCamera(camera: import('@babylonjs/core/Cameras/arcRotateCamera.js').ArcRotateCamera): void {
     frameStation(camera, {
       // Between the bath and the dial: both have to be readable at once.
-      target: new Vector3(0, BENCH_Y + 0.16, 0),
-      alpha: -Math.PI / 2 - 0.12,
-      beta: 1.12,
-      radius: 0.72,
+      target: new Vector3(0, BENCH_Y + 0.2, 0),
+      alpha: -Math.PI / 2 - 0.1,
+      beta: 1.1,
+      radius: 0.92,
     });
   }
 

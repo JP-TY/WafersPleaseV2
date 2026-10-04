@@ -155,6 +155,42 @@ export class ShiftSession {
   /** Fired after a rework bench closes, so the caller can restore the station view. */
   onStationRestore: () => void = () => {};
 
+  /**
+   * Which surface currently owns the camera.
+   *
+   * `onStateChange` fires for every phase change, and main.ts reframes the room
+   * on each one. That silently undid `bench.frameCamera()` — the bench framed
+   * the camera and the very next state change snapped it back to the room view,
+   * which is why an open bench kept rendering as a distant, unreadable smudge.
+   * While a bench owns the view, state changes must leave the camera alone.
+   */
+  private viewOwner: 'station' | 'bench' = 'station';
+
+  /** True while a bench holds the screen and the station must stay hidden. */
+  private stationSuppressed = false;
+
+  /**
+   * Put the session into (or out of) bench-only view.
+   *
+   * Used by the `?station=` mounts, which need the same treatment a real rework
+   * gets: station down, stamps disabled, camera handed to the bench.
+   */
+  enterBenchView(active: boolean): void {
+    this.setStationVisible(!active);
+    this.stamps.setEnabled(!active && !this.reworkBench);
+    this.viewOwner = active ? 'bench' : 'station';
+  }
+
+  /** True when a rework bench, rather than the inspection station, is on screen. */
+  get benchOwnsView(): boolean {
+    return this.viewOwner === 'bench';
+  }
+
+  /** Hand the camera to a surface. main.ts uses this for `?station=` mounts. */
+  setViewOwner(owner: 'station' | 'bench'): void {
+    this.viewOwner = owner;
+  }
+
   constructor(
     scene: Scene,
     cfg: ShiftConfig,
@@ -685,8 +721,9 @@ export class ShiftSession {
     bench.setVisible(true);
     this.stamps.setEnabled(false);
     this.setStationVisible(false);
-    if (bench.frameCamera && this.camera) bench.frameCamera(this.camera);
+    this.viewOwner = 'bench';
     this.onStateChange();
+    if (bench.frameCamera && this.camera) bench.frameCamera(this.camera);
   }
 
   /**
@@ -702,6 +739,7 @@ export class ShiftSession {
     this.reworkBench = null;
     this.stamps.setEnabled(true);
     this.setStationVisible(true);
+    this.viewOwner = 'station';
     // Hand the camera back to the station's working view.
     this.onStationRestore?.();
 
@@ -782,7 +820,12 @@ export class ShiftSession {
    * a rework takes over the bench without changing phase, so the station has to be
    * switchable independently of it.
    */
-  private setStationVisible(visible: boolean): void {
+  setStationVisible(visible: boolean): void {
+    this.stationSuppressed = !visible;
+    this.applyStationVisibility(visible);
+  }
+
+  private applyStationVisibility(visible: boolean): void {
     this.stage.setVisible(visible);
     this.traveler.setVisible(visible);
     this.cluster.setVisible(visible);
@@ -799,20 +842,24 @@ export class ShiftSession {
     this.briefing.setVisible(this.phase === 'Briefing');
     this.debrief.setVisible(this.phase === 'Debrief' || this.phase === 'Complete');
     void paperwork;
-    this.stage.setVisible(inspecting);
-    this.traveler.setVisible(inspecting || this.phase === 'Break');
-    this.cluster.setVisible(inspecting);
+    // A bench owns the screen while it is open: the station stays down no matter
+    // what the phase machine says, otherwise the metrology rack reappears in
+    // front of the bench the moment the phase ticks over.
+    const onStage = inspecting && !this.stationSuppressed;
+    this.stage.setVisible(onStage);
+    this.traveler.setVisible((inspecting || this.phase === 'Break') && !this.stationSuppressed);
+    this.cluster.setVisible(onStage);
     // The progression board only belongs on-stage during the Progression phase;
     // the debrief has its own board on the same wall.
     if (this.phase !== 'Progression') this.progression.setVisible(false);
-    this.stamps.setVisible(inspecting || this.phase === 'Break');
-    this.crossDial.mesh.setEnabled(inspecting);
-    this.glossary.setVisible(this.glossary.isOpen && inspecting);
+    this.stamps.setVisible((inspecting || this.phase === 'Break') && !this.stationSuppressed);
+    this.crossDial.mesh.setEnabled(onStage);
+    this.glossary.setVisible(this.glossary.isOpen && onStage);
     // The wafer stage is hidden while paperwork is up, but the cluster rack and
     // traveler must not be left floating with no bench context, so keep the
     // wafer stage visible on Break only.
     void paperwork;
-    this.stamps.setEnabled(inspecting && !this.reworkBench);
+    this.stamps.setEnabled(inspecting && !this.reworkBench && !this.stationSuppressed);
     this.traveler.setPhase(this.phase);
   }
 

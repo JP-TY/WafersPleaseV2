@@ -97,8 +97,11 @@ session.setReworkBenches(benches);
 if (!forcedStation) for (const b of Object.values(benches)) b.setVisible(false);
 
 if (forcedStation && forcedStation in benches) {
-  benches[forcedStation]!.setVisible(true);
+  // Every bench stands at the same bay coordinates, so a forced mount has to put
+  // the other two away or they render inside the one being inspected.
+  for (const [key, bench] of Object.entries(benches)) bench.setVisible(key === forcedStation);
   session.beginShift();
+  session.enterBenchView(true);
   benches[forcedStation]!.frameCamera?.(camera);
 }
 
@@ -243,7 +246,9 @@ function syncHud(): void {
 }
 
 session.onStateChange = () => {
-  frameWorkspace(camera, { phase: session.currentPhase, quizOpen: session.quizOpen });
+  // A rework bench owns the camera while it is open; reframing the room here
+  // would tear the player away from the bench they are working on.
+  if (!session.benchOwnsView) frameWorkspace(camera, { phase: session.currentPhase, quizOpen: session.quizOpen });
   syncHud();
 };
 session.onProgressionChange = () => {

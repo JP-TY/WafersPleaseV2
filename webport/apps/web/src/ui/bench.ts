@@ -130,6 +130,38 @@ export function mountBench(scene: Scene, name: string, panel: Panel): BenchMount
   };
 }
 
+/**
+ * Re-seat an instrument screen that shares a surface with a purpose-built bench.
+ *
+ * `mountBench` lays a screen out for a bench that IS the instrument: it positions
+ * the screen at bench height on the centreline and adds a bench top of its own.
+ * A wet bench is the opposite — it has a deck with chemistry on it, and the screen
+ * is a small instrument standing at the back. Left alone the screen ends up at
+ * (0, BENCH_Y, 0), which is *inside* the deck box, and the duplicate bench top
+ * renders through the chemistry.
+ *
+ * `tilt` leans the top away from the operator, so a screen at the back of a deep
+ * bench still faces the person sitting in front of it.
+ */
+export function placeInstrument(
+  mount: BenchMount,
+  opts: { y: number; z: number; x?: number; tilt?: number },
+): void {
+  const x = opts.x ?? 0;
+  const tilt = opts.tilt ?? 0;
+  for (const mesh of mount.root.getChildMeshes()) {
+    if (mesh.name.endsWith('-bench')) {
+      // The real bench supplies its own deck; this one would z-fight with it.
+      mesh.setEnabled(false);
+      continue;
+    }
+    if (mesh.name.endsWith('-screen') || mesh.name.endsWith('-bezel')) {
+      mesh.position.set(x, opts.y, opts.z);
+      mesh.rotation.set(tilt, 0, 0);
+    }
+  }
+}
+
 /** Panel-pixel coordinates for a pointer event that hit a screen mesh. */
 export function pickPanel(
   scene: Scene,
