@@ -15,6 +15,7 @@ import type { Scene } from '@babylonjs/core/scene.js';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
 import type { Panel } from './panel.js';
 import { bezel, matte, screenFromPanel } from '../scene.js';
+import { painted } from '../scene/lighting.js';
 
 export interface BenchMount {
   /** Parent node — move or hide this to take the whole station off-stage. */
@@ -49,9 +50,10 @@ export function mountClipboard(scene: Scene, name: string, panel: Panel, w: numb
   // Canted back so it faces an operator looking slightly down at the bench.
   tilt.rotation.x = -0.34;
 
-  const frame = bezel(scene, `${name}-bezel`, w, h, 0.02);
+  const frame = CreateBox(`${name}-bezel`, { width: w + 0.03, height: h + 0.03, depth: 0.018 }, scene);
   frame.parent = tilt;
-  frame.position = new Vector3(0, 0, 0.03);
+  frame.position = new Vector3(0, 0, 0.028);
+  frame.material = painted(scene, `${name}-bezel-mat`, '#2b303a', 0.55);
 
   const screen = screenFromPanel(scene, panel.texture, `${name}-screen`, w, h);
   screen.parent = tilt;

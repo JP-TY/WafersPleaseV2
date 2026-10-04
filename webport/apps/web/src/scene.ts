@@ -9,16 +9,16 @@
 import { Engine } from '@babylonjs/core/Engines/engine.js';
 import { Scene } from '@babylonjs/core/scene.js';
 import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js';
-import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight.js';
-import { DirectionalLight } from '@babylonjs/core/Lights/directionalLight.js';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Color3, Color4 } from '@babylonjs/core/Maths/math.color.js';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder.js';
 import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
 import { CreateGround } from '@babylonjs/core/Meshes/Builders/groundBuilder.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
+import { PBRMaterial } from '@babylonjs/core/Materials/PBR/pbrMaterial.js';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
 import type { Texture } from '@babylonjs/core/Materials/Textures/texture.js';
+import { steel } from './scene/lighting.js';
 import '@babylonjs/core/Materials/standardMaterial.js';
 // Side-effect import that registers the ray/picking pipeline. With deep ES6
 // imports `scene.pick` is present on the API but silently never hits anything
@@ -58,9 +58,9 @@ export function frameWorkspace(camera: ArcRotateCamera, opts: { phase?: string }
   } else {
     // Working view: wafer stage centred, clipboard and stamps flanking, rack
     // above. Pitched down a little, from a seated eye height.
-    camera.setTarget(new Vector3(0, 1.46, 0.12));
-    camera.beta = 1.31;
-    camera.radius = 2.05;
+    camera.setTarget(new Vector3(0, 1.44, 0.1));
+    camera.beta = 1.33;
+    camera.radius = 1.82;
   }
   camera.lowerRadiusLimit = 0.8;
   camera.upperRadiusLimit = 4;
@@ -89,18 +89,21 @@ export function createStage(canvas: HTMLCanvasElement): Stage {
   // 1 unit = 1 metre, per the VR guidance. Eye height ~1.6 m seated.
   camera.wheelPrecision = 40;
 
-  new HemisphericLight('ambient', new Vector3(0, 1, 0), scene).intensity = 0.42;
-  const key = new DirectionalLight('key', new Vector3(-0.5, -1, -0.45), scene);
-  key.intensity = 0.85;
-  key.position = new Vector3(3, 5, 2.5);
-
   engine.runRenderLoop(() => scene.render());
   window.addEventListener('resize', () => engine.resize());
 
   return { engine, scene, camera, canvas };
 }
 
-/** Unlit emissive material — for anything that is a light source or a screen. */
+/**
+ * Unlit emissive material — for anything that IS a light source or a screen.
+ *
+ * Kept as `StandardMaterial` with `disableLighting` rather than a PBR material on
+ * purpose: these panels must emit at exactly the value painted into them. A PBR
+ * material would multiply the panel by the environment and tone mapping, so a
+ * dim reading would lift toward the room's brightness and the instrument would
+ * stop being readable as a measurement.
+ */
 export function emissive(scene: Scene, name: string, color: Color3, texture?: Texture): StandardMaterial {
   const mat = new StandardMaterial(name, scene);
   mat.diffuseColor = Color3.Black();
@@ -114,11 +117,21 @@ export function emissive(scene: Scene, name: string, color: Color3, texture?: Te
   return mat;
 }
 
-/** Matte surface for room geometry. */
-export function matte(scene: Scene, name: string, color: Color3, specular = 0.04): StandardMaterial {
-  const mat = new StandardMaterial(name, scene);
-  mat.diffuseColor = color;
-  mat.specularColor = new Color3(specular, specular, specular);
+/**
+ * Matte surface for room geometry.
+ *
+ * A PBR material so room surfaces pick up the environment. The specular argument
+ * becomes roughness, which is the PBR equivalent and what the eye actually reads:
+ * a low-gloss floor and a high-gloss bench need different numbers here, and the
+ * old specular scale could not express that distinction.
+ */
+export function matte(scene: Scene, name: string, color: Color3, specular = 0.04): PBRMaterial {
+  const mat = new PBRMaterial(name, scene);
+  mat.albedoColor = color;
+  // specular 0.04 (very matte) -> roughness 0.95; specular 0.4 (glossy) -> 0.2
+  mat.roughness = Math.max(0.12, Math.min(0.98, 1 - specular * 2.4));
+  mat.metallic = 0;
+  mat.environmentIntensity = 0.7;
   return mat;
 }
 
@@ -151,7 +164,7 @@ export function screenFromPanel(
  */
 export function bezel(scene: Scene, name: string, w: number, h: number, depth = 0.02): AbstractMesh {
   const b = CreateBox(name, { width: w + 0.035, height: h + 0.035, depth }, scene);
-  b.material = matte(scene, `${name}-mat`, new Color3(0.19, 0.21, 0.24), 0.16);
+  b.material = steel(scene, `${name}-mat`, '#6d757f');
   return b;
 }
 

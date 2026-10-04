@@ -47,7 +47,7 @@ export class TravelerView {
 
   constructor(scene: Scene) {
     this.panel = new Panel('traveler-panel', { width: W, height: H, scale: 1.4 });
-    this.mount = mountClipboard(scene, 'traveler', this.panel, 0.42, 0.54);
+    this.mount = mountClipboard(scene, 'traveler', this.panel, 0.34, 0.44);
     this.mount.root.position = LAYOUT.traveler.clone();
     this.mount.root.rotation.y = TRAVELER_YAW;
     this.panel.invalidate();
@@ -90,11 +90,11 @@ export class TravelerView {
 
   private paint(c: PanelCtx): void {
     // Paper, not glass. A traveler is printed on a folder.
-    c.ctx.fillStyle = '#d9d2c0';
+    c.ctx.fillStyle = '#a49d8b';
     c.ctx.fillRect(0, 0, c.w, c.h);
     // Faint fibre texture so the sheet does not read as flat white.
     c.ctx.globalAlpha = 0.05;
-    c.ctx.strokeStyle = '#8a7f66';
+    c.ctx.strokeStyle = '#6d6552';
     for (let i = 0; i < 60; i++) {
       const y = (i * 37) % c.h;
       c.ctx.beginPath();

@@ -24,11 +24,11 @@ import { CreateTorus } from '@babylonjs/core/Meshes/Builders/torusBuilder.js';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js';
-import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
 import { SpotLight } from '@babylonjs/core/Lights/spotLight.js';
 import { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
-import { matte, emissive } from '../scene.js';
+import { emissive } from '../scene.js';
+import { painted, silicon, steel } from '../scene/lighting.js';
 import { BENCH_Y, LAYOUT } from './bay.js';
 
 export { BENCH_Y };
@@ -94,39 +94,52 @@ export class WaferStage {
     );
     this.wafer.parent = this.tiltPivot;
 
-    // Silicon is a mirror. High specular + the die texture as a subtle emissive
-    // is what stops it reading as a grey plastic puck under the room lights.
-    const silicon = new StandardMaterial('wafer-silicon', scene);
-    silicon.diffuseColor = new Color3(0.16, 0.17, 0.21);
-    silicon.specularColor = new Color3(0.95, 0.96, 1);
-    silicon.specularPower = 96;
-    silicon.emissiveTexture = this.surfaceTex;
-    silicon.emissiveColor = new Color3(0.2, 0.22, 0.27);
-    this.wafer.material = silicon;
+    // Silicon is a mirror, and the environment cube is what makes that read.
+    // A StandardMaterial with a high specular power looked like grey plastic,
+    // because it had nothing to reflect but two flat lights.
+    this.wafer.material = silicon(scene, 'wafer-silicon', this.surfaceTex);
+    // A real 300 mm wafer sits in a shallow carrier ring, which is also what
+    // gives the eye a reference for the wafer's edge thickness.
+    const carrier = CreateCylinder(
+      'wafer-carrier',
+      { diameter: WAFER_RADIUS * 2 + 0.028, height: 0.022, tessellation: 72 },
+      scene,
+    );
+    carrier.parent = this.tiltPivot;
+    carrier.position = new Vector3(0, -WAFER_THICKNESS * 1.6, 0);
+    carrier.material = painted(scene, 'wafer-carrier-mat', '#1c1f26', 0.42);
+    const carrierLip = CreateTorus(
+      'wafer-carrier-lip',
+      { diameter: WAFER_RADIUS * 2 + 0.028, thickness: 0.006, tessellation: 72 },
+      scene,
+    );
+    carrierLip.parent = this.tiltPivot;
+    carrierLip.position = new Vector3(0, -0.008, 0);
+    carrierLip.material = steel(scene, 'wafer-carrier-lip-mat', '#9aa4b0');
 
     // Orientation flat. Real wafers are keyed by it, and it is the only way to
     // tell which way round the die grid runs.
     const flat = CreateBox('wafer-flat', { width: FLAT_DEPTH, height: WAFER_THICKNESS * 1.4, depth: 0.001 }, scene);
     flat.parent = this.tiltPivot;
     flat.position = new Vector3(0, WAFER_THICKNESS * 0.5, -(WAFER_RADIUS - FLAT_DEPTH / 2));
-    flat.material = matte(scene, 'wafer-flat-mat', new Color3(0.06, 0.07, 0.09), 0.5);
+    flat.material = painted(scene, 'wafer-flat-mat', '#0e1116', 0.2);
 
     // --- mount stage ------------------------------------------------------
     const chuck = CreateCylinder('wafer-chuck', { diameter: 0.24, height: 0.028, tessellation: 64 }, scene);
     chuck.parent = this.root;
     chuck.position = new Vector3(0, BENCH_Y + 0.014, 0);
-    chuck.material = matte(scene, 'wafer-chuck-mat', new Color3(0.2, 0.21, 0.24), 0.22);
+    chuck.material = steel(scene, 'wafer-chuck-mat', '#69727d');
 
     // Column down to the bench, with a foot flange so it looks bolted on.
     const post = CreateCylinder('wafer-post', { diameter: 0.06, height: 0.16, tessellation: 24 }, scene);
     post.parent = this.root;
     post.position = new Vector3(0, BENCH_Y - 0.07, 0);
-    post.material = matte(scene, 'wafer-post-mat', new Color3(0.15, 0.16, 0.18), 0.18);
+    post.material = steel(scene, 'wafer-post-mat', '#5a626c');
 
     const base = CreateCylinder('wafer-base', { diameter: 0.18, height: 0.016, tessellation: 48 }, scene);
     base.parent = this.root;
     base.position = new Vector3(0, BENCH_Y - 0.142, 0);
-    base.material = matte(scene, 'wafer-base-mat', new Color3(0.13, 0.14, 0.16), 0.14);
+    base.material = steel(scene, 'wafer-base-mat', '#4e565f');
 
     // Vacuum chuck grooves: concentric rings, purely to sell that it is
     // hardware and to give the eye something to read tilt against.
@@ -138,7 +151,7 @@ export class WaferStage {
       );
       ring.parent = this.root;
       ring.position = new Vector3(0, BENCH_Y + 0.03, 0);
-      ring.material = matte(scene, `chuck-ring-mat-${i}`, new Color3(0.3, 0.31, 0.34), 0.4);
+      ring.material = steel(scene, `chuck-ring-mat-${i}`, '#aab4c0');
     }
 
     // --- cross-illumination (GDD §13) -------------------------------------
@@ -146,13 +159,13 @@ export class WaferStage {
     // or a warp visible as a gradient across the surface at all; overhead light
     // alone hides it completely, which would make the geometry mechanic a lie.
     const crossLight = (name: string, x: number, z: number): SpotLight => {
-      const light = new SpotLight(name, new Vector3(x, BENCH_Y + 0.3, z), new Vector3(-x, -0.3, -z).normalize(), 1.9, 8, scene);
-      light.intensity = 14;
+      const light = new SpotLight(name, new Vector3(x, BENCH_Y + 0.26, z), new Vector3(-x, -0.26, -z).normalize(), 0.62, 6, scene);
+      light.intensity = 1.5;
       light.diffuse = new Color3(0.85, 0.9, 1);
       return light;
     };
-    this.crossLightL = crossLight('cross-l', -0.62, 0.3);
-    this.crossLightR = crossLight('cross-r', 0.62, -0.26);
+    this.crossLightL = crossLight('cross-l', -0.42, 0.22);
+    this.crossLightR = crossLight('cross-r', 0.42, -0.2);
 
     this.markers = new TransformNode('wafer-markers', scene);
     this.markers.parent = this.tiltPivot;
@@ -171,9 +184,9 @@ export class WaferStage {
 
     // Wafer body disc.
     const g = ctx.createRadialGradient(c, c, 0, c, c, r);
-    g.addColorStop(0, '#3a4152');
-    g.addColorStop(0.72, '#2b3140');
-    g.addColorStop(1, '#1b2029');
+    g.addColorStop(0, '#4d5670');
+    g.addColorStop(0.72, '#39415a');
+    g.addColorStop(1, '#252b3c');
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(c, c, r, 0, Math.PI * 2);
@@ -190,7 +203,7 @@ export class WaferStage {
     ctx.beginPath();
     ctx.arc(c, c, r, 0, Math.PI * 2);
     ctx.clip();
-    ctx.strokeStyle = 'rgba(150,175,210,0.20)';
+    ctx.strokeStyle = 'rgba(178,200,235,0.42)';
     ctx.lineWidth = 1;
     for (let i = 0; i <= DIE_GRID; i++) {
       const p = c - (size * 0.47) + i * step;
@@ -202,7 +215,7 @@ export class WaferStage {
       ctx.stroke();
     }
     // Reticle name bands along two edges, the way a real die map is annotated.
-    ctx.fillStyle = 'rgba(120,150,190,0.16)';
+    ctx.fillStyle = 'rgba(150,180,220,0.3)';
     for (let i = 0; i < DIE_GRID; i += 2) {
       const p = c - (size * 0.47) + i * step;
       ctx.fillRect(p + 1, c - r, step * 0.8, 10);
@@ -210,7 +223,7 @@ export class WaferStage {
     ctx.restore();
 
     // Edge exclusion ring.
-    ctx.strokeStyle = 'rgba(90,110,140,0.35)';
+    ctx.strokeStyle = 'rgba(140,165,200,0.5)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(c, c, r * 0.985, 0, Math.PI * 2);
@@ -262,7 +275,7 @@ export class WaferStage {
         const disc = CreateDisc(`marker-${d.defectType}`, { radius: 0.018 * scale, tessellation: 28 }, this.scene);
         disc.parent = this.markers;
         disc.rotation.x = Math.PI / 2;
-        disc.position = new Vector3(x, WAFER_THICKNESS * 0.6, z);
+        disc.position = new Vector3(x, WAFER_THICKNESS * 0.5 + 0.0016, z);
         disc.material = emissive(this.scene, `marker-mat-${d.defectType}`, Color3.FromHexString(cue.color));
       } else if (cue.kind === 'ring') {
         const ring = CreateTorus(
@@ -271,7 +284,7 @@ export class WaferStage {
           this.scene,
         );
         ring.parent = this.markers;
-        ring.position = new Vector3(x, WAFER_THICKNESS * 0.7, z);
+        ring.position = new Vector3(x, WAFER_THICKNESS * 0.5 + 0.0018, z);
         ring.material = emissive(this.scene, `marker-mat-${d.defectType}`, Color3.FromHexString(cue.color));
       } else {
         // A stringer is a filament, not a dot: two parallel strokes along the
@@ -283,7 +296,7 @@ export class WaferStage {
             this.scene,
           );
           bar.parent = this.markers;
-          bar.position = new Vector3(x + off * 0.008 * scale, WAFER_THICKNESS * 0.6, z);
+          bar.position = new Vector3(x + off * 0.008 * scale, WAFER_THICKNESS * 0.5 + 0.0016, z);
           bar.material = emissive(this.scene, `marker-mat-${d.defectType}`, Color3.FromHexString(cue.color));
         }
       }
@@ -325,12 +338,12 @@ export class WaferStage {
    */
   setCrossAngle(radians: number): void {
     const a = clampAngle(radians);
-    const d = 0.66;
-    const y = BENCH_Y + 0.3;
+    const d = 0.42;
+    const y = BENCH_Y + 0.26;
     this.crossLightL.position = new Vector3(-Math.cos(a) * d, y, Math.sin(a) * d);
     this.crossLightR.position = new Vector3(Math.cos(a) * d, y, -Math.sin(a) * d);
-    this.crossLightL.direction = new Vector3(Math.cos(a) * d, -0.3, -Math.sin(a) * d).normalize();
-    this.crossLightR.direction = new Vector3(-Math.cos(a) * d, -0.3, Math.sin(a) * d).normalize();
+    this.crossLightL.direction = new Vector3(Math.cos(a) * d, -0.26, -Math.sin(a) * d).normalize();
+    this.crossLightR.direction = new Vector3(-Math.cos(a) * d, -0.26, Math.sin(a) * d).normalize();
   }
 
   update(dt: number): void {

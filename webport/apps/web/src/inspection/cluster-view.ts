@@ -21,7 +21,6 @@ import type { Scene } from '@babylonjs/core/scene.js';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder.js';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
-import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import {
   C,
   MONO,
@@ -34,7 +33,8 @@ import {
   value,
   type PanelCtx,
 } from '../ui/panel.js';
-import { screenFromPanel, bezel, matte } from '../scene.js';
+import { screenFromPanel, bezel } from '../scene.js';
+import { painted, rubber, steel } from '../scene/lighting.js';
 import { pickPanel } from '../ui/bench.js';
 import { LAYOUT } from './bay.js';
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
@@ -75,46 +75,76 @@ interface Screen {
 
 export class ClusterView {
   private readonly root: TransformNode;
+  /** Tilted child of root; all rack geometry hangs off this. */
+  private readonly rack: TransformNode;
   private readonly screens = new Map<ToolType, Screen>();
 
   constructor(scene: Scene) {
     this.root = new TransformNode('metrology-cluster', scene);
+    this.root.position = new Vector3(LAYOUT.cluster.x, LAYOUT.cluster.y, LAYOUT.cluster.z);
+    // Pitched forward about the rack's lower edge. Without this the panels stood
+    // vertical at eye height across the room, and reading one meant looking
+    // straight ahead rather than down at the bench you were working on.
+    const pitchPivot = new TransformNode('metrology-pitch', scene);
+    pitchPivot.parent = this.root;
+    pitchPivot.rotation.x = LAYOUT.clusterPitch;
+    this.rack = pitchPivot;
 
     // Rack frame so the cluster reads as a rack of instruments, not five quads
     // floating at the same depth.
-    const frame = CreateBox('cluster-rack', { width: 2.5, height: 0.06, depth: 0.34 }, scene);
-    frame.parent = this.root;
-    frame.position = new Vector3(LAYOUT.cluster.x, LAYOUT.cluster.y - 0.18, LAYOUT.cluster.z);
-    frame.material = matte(scene, 'cluster-rack-mat', new Color3(0.15, 0.16, 0.19), 0.1);
+    // Rack body, as one welded tray rather than a rail plus posts: it reads as
+    // a single instrument housing and gives the bezels something to sit in.
+    const frame = CreateBox('cluster-rack', { width: 2.36, height: 0.07, depth: 0.3 }, scene);
+    frame.parent = this.rack;
+    frame.position = new Vector3(0, -0.1, 0.01);
+    frame.material = steel(scene, 'cluster-rack-mat', '#727c88');
 
-    const upright = CreateBox('cluster-upright-l', { width: 0.06, height: 0.5, depth: 0.06 }, scene);
-    upright.parent = this.root;
-    upright.position = new Vector3(-1.2, LAYOUT.cluster.y - 0.36, LAYOUT.cluster.z);
-    upright.material = matte(scene, 'cluster-upright-mat', new Color3(0.15, 0.16, 0.19), 0.1);
-    const upright2 = upright.clone('cluster-upright-r');
-    upright2.position = new Vector3(1.2, LAYOUT.cluster.y - 0.36, LAYOUT.cluster.z);
+    // Angled back panel the screens bolt into, so the rack has depth.
+    const backPanel = CreateBox('cluster-back', { width: 2.36, height: 0.44, depth: 0.03 }, scene);
+    backPanel.parent = this.rack;
+    backPanel.position = new Vector3(0, 0.08, 0.05);
+    backPanel.material = painted(scene, 'cluster-back-mat', '#20242c', 0.5);
 
-    // Five across the top row; the rack is wider than the bench so it reads as
-    // a cluster you turn to, which is the GDD's "turn to an instrument" motion.
+    // Standoff posts down to the bench.
+    for (const sx of [-1, 1]) {
+      const upright = CreateBox(`cluster-upright-${sx}`, { width: 0.05, height: 0.3, depth: 0.05 }, scene);
+      upright.parent = this.root;
+      upright.position = new Vector3(sx * 1.12, LAYOUT.cluster.y - 0.34, LAYOUT.cluster.z + 0.04);
+      upright.material = steel(scene, `cluster-upright-mat-${sx}`, '#5b636d');
+    }
+
+    // Five across the rack. They ARC around the operator: the outer two are
+    // rotated inward so all five are readable from one seated position. Square
+    // in a row meant only the middle screen faced you, and reading the ends
+    // meant leaning around the wafer.
     HOTKEYS.forEach(([key, tool], i) => {
       const panel = new Panel(`cluster-${tool}`, { width: PW, height: PH, scale: 1.6 });
-      const x = LAYOUT.cluster.x + (i - 2) * 0.5;
-      const y = LAYOUT.cluster.y - Math.abs(i - 2) * 0.03;
+      const lateral = i - 2;
+      const arc = -lateral * 0.14;
+      const x = lateral * 0.47;
+      const y = 0.13 - Math.abs(lateral) * 0.012;
+      // Push each screen out along its own facing normal so the arc keeps the
+      // bezels from intersecting at the centre.
+      const nx = Math.sin(arc);
+      const nz = Math.cos(arc);
 
-      const mesh = screenFromPanel(scene, panel.texture, `cluster-${tool}-screen`, 0.46, 0.3);
-      mesh.parent = this.root;
-      mesh.position = new Vector3(x, y, LAYOUT.cluster.z);
+      const mesh = screenFromPanel(scene, panel.texture, `cluster-${tool}-screen`, 0.45, 0.29);
+      mesh.parent = this.rack;
+      mesh.position = new Vector3(x, y, 0);
+      mesh.rotation.y = arc;
 
-      const bez = bezel(scene, `cluster-${tool}-bezel`, 0.46, 0.3, 0.03);
-      bez.parent = this.root;
-      bez.position = new Vector3(x, y, LAYOUT.cluster.z + 0.025);
+      const bez = bezel(scene, `cluster-${tool}-bezel`, 0.45, 0.29, 0.022);
+      bez.parent = this.rack;
+      bez.position = new Vector3(x + nx * 0.022, y, nz * 0.022);
+      bez.rotation.y = arc;
 
       // Physical RUN button under each screen: the instrument is a tool you
-      // operate, not a readout you toggle.
-      const btn = CreateBox(`cluster-${tool}-run`, { width: 0.13, height: 0.03, depth: 0.09 }, scene);
-      btn.parent = this.root;
-      btn.position = new Vector3(x, y - 0.185, LAYOUT.cluster.z + 0.03);
-      btn.material = matte(scene, `cluster-${tool}-run-mat`, new Color3(0.34, 0.36, 0.4), 0.3);
+      // operate, not a readout you toggle. Recessed, rubber, angled to match.
+      const btn = CreateBox(`cluster-${tool}-run`, { width: 0.11, height: 0.026, depth: 0.07 }, scene);
+      btn.parent = this.rack;
+      btn.position = new Vector3(x + nx * 0.055, y - 0.183, nz * 0.055);
+      btn.rotation.y = arc;
+      btn.material = rubber(scene, `cluster-${tool}-run-mat`, '#2b2f37');
 
       this.screens.set(tool, { tool, panel, mesh, history: [], reading: null, measured: false });
       void key;

@@ -29,6 +29,7 @@ import matrixData from '@wafers/data/config/rule-matrices.json';
 import scoringData from '@wafers/data/config/scoring.json';
 import toolsData from '@wafers/data/config/tools.json';
 import { createStage, frameWorkspace } from './scene.js';
+import { installEnvironment, installLighting, installPipeline } from './scene/lighting.js';
 import { buildBay } from './inspection/bay.js';
 import { RcaBench } from './rework/rca-view.js';
 import { SilicideBench } from './rework/silicide-view.js';
@@ -52,7 +53,14 @@ const rules = (matrixData as { ruleMatrices: RuleMatrix[] }).ruleMatrices.find(
 
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
 const { engine, scene, camera } = createStage(canvas);
-buildBay(scene);
+// Order matters: the environment first, because PBR materials compile against
+// the scene's IBL, and lighting before the pipeline so tone mapping is tuned to
+// the final light levels. The bay is built last because it registers the bench
+// as a shadow caster.
+installEnvironment(scene);
+const lighting = installLighting(scene);
+installPipeline(scene, camera);
+buildBay(scene, lighting.shadows);
 frameWorkspace(camera, { phase: 'Briefing' });
 
 // One parent RNG for the shift, forked per bench so that playing one does not
@@ -201,6 +209,7 @@ session.onStateChange();
 // through synthetic mesh raycasts, so UI tests do not depend on camera framing.
 (window as unknown as Record<string, unknown>).__WP = {
   benches,
+  lighting,
   session,
   scene,
   get phase() {
