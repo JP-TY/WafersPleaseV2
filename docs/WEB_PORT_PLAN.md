@@ -136,15 +136,25 @@ imports are mandatory** or tree-shaking is lost.
 
 ```
 WafersPleaseV2/
-├── unity-reference/          Unity tree, read-only — behavioural spec of record
-├── packages/
-│   ├── sim/                  PURE TS. No Babylon, no DOM. Seeded PRNG, lot generation,
-│   │                         defect sampling, metrology, scoring, day gates, shift machine.
-│   │                         Vitest + fast-check. Purity enforced by CI import-ban.
-│   ├── data/                 JSON schemas + zod validation + TS types
-│   └── content/              config JSON + KTX2/Meshopt glTF (≤4 MB total)
-└── apps/web/                 Babylon.js 9 scene, diegetic UI, WebXR, PWA
+├── Assets/ Packages/ ProjectSettings/     Unity tree, read-only — behavioural spec
+└── webport/                  the entire web port, isolated from the Unity project
+    ├── pnpm-workspace.yaml
+    ├── packages/
+    │   ├── sim/              PURE TS. No Babylon, no DOM. Seeded PRNG, lot generation,
+    │   │                     defect sampling, metrology, scoring, day gates, shift machine.
+    │   │                     Vitest + fast-check. Purity enforced by CI import-ban.
+    │   ├── data/             JSON schemas + zod validation + TS types
+    │   └── content/          config JSON + optimized glTF (3.16 MB, Phase 1 complete)
+    └── apps/web/             Babylon.js 9 scene, diegetic UI, WebXR, PWA
 ```
+
+**Why `webport/` and not a top-level `packages/`:** the Unity project already owns a top-level
+`Packages/` (capital P) containing `manifest.json` and `packages-lock.json`. Those are distinct
+directories on Linux, but this repo's git index is case-insensitive and staged new files as
+`Packages/content/` — which on a case-sensitive checkout lands inside Unity's package directory
+and makes Unity try to interpret `content/` as a package. Isolating the port under `webport/`
+removes the collision structurally instead of depending on git config, and makes "the Unity tree
+is reference-only" a physical boundary.
 
 `packages/sim` must import with zero engine and zero DOM dependencies. Enforced in CI by a
 grep-level import ban — this replaces the lost `PurityScanner` and is the one architectural

@@ -105,3 +105,16 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# ---- Web port (Babylon.js / TypeScript monorepo) ----
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+.turbo/
+.DS_Store
+
+# NOTE: packages/content/public/models/ is intentionally COMMITTED, not ignored.
+# It is generated from Assets/Models/*.glb by packages/content/scripts/build-assets.mjs, but is
+# committed so deploys need no image toolchain and asset changes are reviewable in diffs.
+# At ~4 MB total it costs nothing. Regenerate with `pnpm assets:build`.
