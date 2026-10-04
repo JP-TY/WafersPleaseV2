@@ -123,6 +123,15 @@ describe('day progression matches the GDD', () => {
     expect(d1.wafersPerDay).toBeLessThan(d2.wafersPerDay);
     expect(d2.wafersPerDay).toBeLessThan(d3.wafersPerDay);
   });
+
+  it('fades scaffolding per GDD §12, correcting the flat Unity boolean', () => {
+    const [d1, d2, d3] = [at(days, 0, 'day 1'), at(days, 1, 'day 2'), at(days, 2, 'day 3')];
+    expect(d1.calloutMode).toBe('Always');
+    expect(d2.calloutMode).toBe('FirstOccurrencePerDefectClass');
+    expect(d3.calloutMode).toBe('Disabled');
+    // The raw Unity value is kept for provenance and is wrong on Day 3.
+    expect(d3.showContextPrompts).toBe(true);
+  });
 });
 
 describe('referential integrity', () => {

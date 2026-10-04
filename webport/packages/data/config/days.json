@@ -17,7 +17,8 @@
         "FourPointProbe"
       ],
       "defectDensity": 0.7,
-      "showContextPrompts": true
+      "showContextPrompts": true,
+      "calloutMode": "Always"
     },
     {
       "id": "day-2-standard",
@@ -36,7 +37,8 @@
         "XRayRefractometry"
       ],
       "defectDensity": 0.4,
-      "showContextPrompts": true
+      "showContextPrompts": true,
+      "calloutMode": "FirstOccurrencePerDefectClass"
     },
     {
       "id": "day-3-certification",
@@ -54,7 +56,8 @@
         "ElectronMicroscope"
       ],
       "defectDensity": 0.3,
-      "showContextPrompts": true
+      "showContextPrompts": true,
+      "calloutMode": "Disabled"
     }
   ]
 }

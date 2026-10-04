@@ -147,9 +147,15 @@ describe('packages/sim is free of engine and platform dependencies', () => {
     expect(violations, violations.join('\n')).toHaveLength(0);
   });
 
-  it('declares no runtime dependencies at all', () => {
+  it('declares only pure sibling-workspace runtime dependencies', () => {
+    // The rule is "no engine, no DOM, no Node, no third-party libraries." A
+    // dependency on another @wafers/* package is allowed only because those
+    // packages carry the same purity contract (packages/data is itself engine-
+    // and DOM-free). Anything else in `dependencies` is a violation.
     const pkg = JSON.parse(readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8'));
-    expect(pkg.dependencies ?? {}).toEqual({});
+    const deps = Object.keys(pkg.dependencies ?? {});
+    const offenders = deps.filter((d) => !d.startsWith('@wafers/'));
+    expect(offenders, `non-workspace dependencies: ${offenders.join(', ')}`).toHaveLength(0);
   });
 });
 

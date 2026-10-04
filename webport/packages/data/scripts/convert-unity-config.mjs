@@ -304,6 +304,15 @@ async function main() {
   // silently normalised away.
   for (const d of buckets.DayConfigSO) {
     if (d.allowedDefects.length === 0) warnings.push(`${d.id}: allowedDefects is empty`);
+
+    // GDD §12: scaffolding fades by Day 3. Unity authored showContextPrompts: 1
+    // on every day, so derive the intended ramp from dayNumber and flag the
+    // discrepancy instead of propagating it.
+    const ramp = { 1: 'Always', 2: 'FirstOccurrencePerDefectClass', 3: 'Disabled' };
+    d.calloutMode = ramp[d.dayNumber] ?? 'Always';
+    if (d.dayNumber === 3 && d.showContextPrompts === true) {
+      warnings.push(`${d.id}: Unity set showContextPrompts:true on Day 3, contradicting GDD §12 "fade away by Day 3" — emitted calloutMode:Disabled instead`);
+    }
   }
   for (const r of buckets.ReworkConfigSO) {
     if (!r.instructionsText) warnings.push(`${r.id}: instructionsText is empty (unauthored)`);

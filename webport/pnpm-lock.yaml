@@ -68,6 +68,10 @@ importers:
         version: 2.9.1
 
   packages/sim:
+    dependencies:
+      '@wafers/data':
+        specifier: workspace:*
+        version: link:../data
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
