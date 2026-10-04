@@ -17,7 +17,7 @@
 import type { ActionPath } from '@wafers/data';
 import type { DispositionResult } from '../evaluation/disposition.js';
 import type { CompetencyInputs } from '../evaluation/scoring.js';
-import { competencyScore } from '../evaluation/scoring.js';
+import { competencyScore, normalizeCompetencyTarget } from '../evaluation/scoring.js';
 import type { ProcessLayer } from '../generation/wafer.js';
 
 export interface WaferRecord {
@@ -39,6 +39,23 @@ export interface WaferRecord {
   /** A rework was attempted on this wafer. */
   readonly reworkAttempted: boolean;
   readonly reworkSucceeded: boolean | null;
+  /**
+   * Whether the player correctly separated the wafer's failure MODE, independent
+   * of whether the resulting ACTION was right.
+   *
+   * Stored (rather than recomputed from `result.outcome`) because outcome mixes
+   * two different questions: "was this a clean wafer?" and "did the player treat
+   * a catastrophic defect as merely parametric?". Reworking a contaminated
+   * wafer (parametric) is `Correct` and was correctly classified; rejecting a
+   * bowed wafer is `Correct` and was correctly classified. GDD §3 asks about the
+   * second question alone.
+   */
+  readonly modeClassifiedCorrectly: boolean;
+  /**
+   * Whether the player used the RIGHT tool for the target defect — the evidence
+   * class the diagnosis was drawn from. GDD §11 Metrology_Optimization_Rate.
+   */
+  readonly diagnosticToolAppropriate: boolean | null;
 }
 
 export interface CompetencyMetrics {
@@ -51,6 +68,13 @@ export interface CompetencyMetrics {
   readonly parametricVsCatastrophic: number;
   /** 1 - (compliance strikes / required checks). */
   readonly metrologyOptimizationRate: number;
+  /**
+   * §11: fraction of defected wafers where at least one USED tool was actually
+   * capable of resolving the defect present. The other half of metrology
+   * optimization — compliance asks "did you run what was required", this asks
+   * "could it see anything".
+   */
+  readonly diagnosticToolRecall: number;
   /** successful reworks / rework attempts. */
   readonly processCompliance: number;
   /** §11: seconds by routing-step family (front-end vs back-end). */
@@ -71,6 +95,13 @@ export interface CompetencyMetrics {
   };
 }
 
+/**
+ * GDD §11 latency is split front-end vs back-end. Boundary is the gate stack:
+ * everything through HighKMetalGate is front-end of line, everything after it
+ * is back-end. Strain/silicide sits on the boundary — the Ti/TiN contacts are
+ * formed in the FEOL/MEOL transition — so it counts as back-end, alongside the
+ * copper damascene work it immediately precedes.
+ */
 const FRONT_END: readonly ProcessLayer[] = ['Substrate', 'ShallowTrenchIsolation', 'HighKMetalGate'];
 
 export class ShiftLedger {
@@ -125,12 +156,21 @@ export class ShiftLedger {
     const killerPresented = rs.filter((r) => r.defectClasses.includes('Catastrophic')).length;
     const killerFalseAcceptRate = safeDiv(killerFalseAccepts, killerPresented);
 
-    // Parametric vs catastrophic: correct action class separation. A stamp is
-    // "correctly classified" when the player treated catastrophic and
-    // parametric defects appropriately (reject catastrophic, follow matrix for
-    // parametric). Approximated by: did the outcome match the correct action?
-    const correctlyClassified = correct;
-    const parametricVsCatastrophic = safeDiv(correctlyClassified, total);
+    // Failure-mode identification (GDD §3): did the player correctly treat
+    // catastrophic defects as catastrophic, and parametric defects as merely
+    // parametric? Computed per wafer and scored against wafers that actually
+    // carried a defect — there is no mode to classify on a clean wafer, and
+    // folding those in would let a player pass by avoiding hard calls.
+    const defectWafers = rs.filter((r) => r.defectClasses.length > 0);
+    const modeCorrect = defectWafers.filter((r) => r.modeClassifiedCorrectly).length;
+    const parametricVsCatastrophic = safeDiv(modeCorrect, defectWafers.length);
+
+    // Diagnostic tool recall: of the wafers that carried a defect, how many were
+    // diagnosed with a tool capable of resolving it. A `null` means no defect,
+    // which is neither a hit nor a miss.
+    const diagnosed = rs.filter((r) => r.diagnosticToolAppropriate !== null);
+    const toolHits = diagnosed.filter((r) => r.diagnosticToolAppropriate === true).length;
+    const diagnosticToolRecall = safeDiv(toolHits, diagnosed.length);
 
     const frontEnd = rs.filter((r) => FRONT_END.includes(r.routingStep)).reduce((a, r) => a + r.durationSeconds, 0);
     const backEnd = rs.filter((r) => !FRONT_END.includes(r.routingStep)).reduce((a, r) => a + r.durationSeconds, 0);
@@ -148,6 +188,7 @@ export class ShiftLedger {
       killerContainment: inputs.killerContainment,
       parametricVsCatastrophic,
       metrologyOptimizationRate: inputs.metrologyOptimizationRate,
+      diagnosticToolRecall,
       processCompliance: inputs.processCompliance,
       latencyByLayer: { frontEnd, backEnd },
       competencyScore: competencyScore(inputs),
@@ -227,7 +268,7 @@ export function buildDebrief(m: CompetencyMetrics, salaryTarget: number, compete
     note:
       m.parametricVsCatastrophic >= TARGETS.parametricVsCatastrophic
         ? 'Parametric speed drops and catastrophic open/short structures were reliably separated.'
-        : 'Parametric speed drops and catastrophic open/short structures were frequently conflated.',
+        : `Operator frequently misidentified failure modes: only ${Math.round(m.parametricVsCatastrophic * 100)}% of defected wafers were correctly classified.`,
     remediation: 'Review Section 6 — parametric leakage vs. catastrophic short. The class matters more than the size.',
   });
 
@@ -255,6 +296,24 @@ export function buildDebrief(m: CompetencyMetrics, salaryTarget: number, compete
     remediation: 'Run the full required metrology set for the routing step before stamping.',
   });
 
+  // §11 Metrology Optimization is really two questions: did you run what was
+  // required (compliance), and did you pick a tool that could see the defect
+  // (diagnostic quality). Surface the second one separately, because a player
+  // can satisfy the first while diagnosing from an instrument blind to the fault.
+  const diagSeen = m.diagnosticToolRecall;
+  lines.push({
+    competency: 'Diagnostic Tool Selection',
+    value: diagSeen,
+    target: 0.85,
+    passed: diagSeen >= 0.85,
+    note:
+      diagSeen >= 0.85
+        ? 'Defects were diagnosed with instruments capable of resolving them.'
+        : `${Math.round((1 - diagSeen) * 100)}% of defects were diagnosed without a tool that can see them (e.g. treating conductive Titanium bridging as benign surface variance).`,
+    remediation:
+      'Match the instrument to the failure mode: surface topography to the Stylus Probe, sub-surface fill to Ellipsometry, interfaces to X-Ray Refractometry, metallization cross-sections to the Electron Microscope.',
+  });
+
   lines.push({
     competency: 'Process Compliance',
     value: m.processCompliance,
@@ -270,7 +329,7 @@ export function buildDebrief(m: CompetencyMetrics, salaryTarget: number, compete
   });
 
   const salaryPassed = t.salaryTotal >= salaryTarget;
-  const competencyPassed = m.competencyScore >= competencyTarget;
+  const competencyPassed = m.competencyScore >= normalizeCompetencyTarget(competencyTarget);
   const passed = salaryPassed && competencyPassed;
 
   // Headline: the single most damaging failure mode, or a strength.

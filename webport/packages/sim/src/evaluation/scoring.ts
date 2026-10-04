@@ -151,19 +151,39 @@ export interface GateResult {
   readonly passed: boolean;
 }
 
+/**
+ * Normalise a competency target to the [0,1] scale the score uses.
+ *
+ * `DayConfig.competencyTarget` is authored as a percentage (70 for all three
+ * days, matching the GDD's "≥70% competency"). `competencyScore` is a [0,1]
+ * fraction. Comparing them directly — as an earlier version did — makes
+ * `0.8 >= 70` false for every possible score, so the competency gate could
+ * never pass and no shift was winnable.
+ *
+ * Anything at or above 1 is read as a percentage and divided by 100; values in
+ * [0,1] are already fractions and pass through. This accepts either authoring
+ * convention rather than silently depending on one.
+ */
+export function normalizeCompetencyTarget(target: number): number {
+  return target > 1 ? target / 100 : target;
+}
+
 export function evaluateGate(
   salaryTotal: number,
   competency: number,
   salaryTarget: number,
   competencyTarget: number,
 ): GateResult {
+  const normalizedTarget = normalizeCompetencyTarget(competencyTarget);
   const salaryPassed = salaryTotal >= salaryTarget;
-  const competencyPassed = competency >= competencyTarget;
+  const competencyPassed = competency >= normalizedTarget;
   return {
     salaryTotal,
     salaryTarget,
     competencyScore: competency,
-    competencyTarget,
+    // Reported normalised, so a gate readout never shows "passed 70" or
+    // "failed 0.8" and the debrief prints the same number it compares against.
+    competencyTarget: normalizedTarget,
     salaryPassed,
     competencyPassed,
     passed: salaryPassed && competencyPassed,

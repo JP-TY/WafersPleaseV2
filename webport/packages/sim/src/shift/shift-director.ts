@@ -23,7 +23,13 @@ import {
   type LatentLot,
   type StationState,
 } from '../generation/wafer.js';
-import { evaluateDisposition, correctActionFor } from '../evaluation/disposition.js';
+import {
+  evaluateDisposition,
+  correctActionFor,
+  classifyWaferMode,
+  modeClassifiedCorrectly,
+  toolCanResolve,
+} from '../evaluation/disposition.js';
 import { scoreDisposition, evaluateGate, scoringTableFromConfig, type ScoringTable } from '../evaluation/scoring.js';
 import { ShiftLedger, buildDebrief, type CompetencyMetrics, type DebriefReport } from '../assessment/metrics.js';
 import type { ActionPath, DayConfig, DefectProfile, RuleMatrix, ScoringConfig, ToolType } from '@wafers/data';
@@ -167,6 +173,18 @@ export class ShiftDirector {
     const needsRework = action === 'Rework' && correctAction === 'Rework' && activeDefects.length > 0;
     const reworkDefectType = needsRework ? activeDefects[0]!.defectType : null;
 
+    // Failure-mode classification (GDD §3) and diagnostic-tool recall (GDD §11)
+    // are separate signals from the disposition outcome, so they are computed
+    // here rather than inferred later from the outcome.
+    const mode = classifyWaferMode(activeDefects.map((d) => d.defectClass));
+    const modeCorrect = modeClassifiedCorrectly(mode, action);
+    // Recall is only meaningful when there is something to have missed: on a
+    // clean wafer no tool could have helped, so record null rather than credit.
+    const toolAppropriate =
+      activeDefects.length === 0
+        ? null
+        : toolsUsed.some((t) => activeDefects.some((d) => toolCanResolve(t, d.defectType)));
+
     if (needsRework) this.pendingRework.add(this.waferIndex);
 
     this.ledger.record({
@@ -182,6 +200,8 @@ export class ShiftDirector {
       requiredChecks: eff.requiredMetrology.length,
       reworkAttempted: action === 'Rework',
       reworkSucceeded: needsRework ? null : action === 'Rework' ? false : null,
+      modeClassifiedCorrectly: modeCorrect,
+      diagnosticToolAppropriate: toolAppropriate,
     });
 
     this.station = tickCmpBrake(this.station);
@@ -227,6 +247,8 @@ export class ShiftDirector {
       competencyDelta:
         rec.competencyDelta + (outcome.success ? this.scoring.reworkSuccessCompetencyBonus : -this.scoring.incorrectCompetencyPenalty),
       reworkSucceeded: outcome.success,
+      modeClassifiedCorrectly: rec.modeClassifiedCorrectly,
+      diagnosticToolAppropriate: rec.diagnosticToolAppropriate,
     });
   }
 

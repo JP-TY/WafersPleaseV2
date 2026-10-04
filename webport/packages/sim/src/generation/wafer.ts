@@ -28,9 +28,35 @@ export const PROCESS_LAYERS = [
   'Substrate',
   'ShallowTrenchIsolation',
   'HighKMetalGate',
+  'StrainSilicide',
   'CopperDamascene',
 ] as const;
 export type ProcessLayer = (typeof PROCESS_LAYERS)[number];
+
+/**
+ * GDD §6 node areas, in the order the process actually builds them. The five
+ * entries are one-for-one with the §6 bullets:
+ *
+ *   Substrate Preparation & Geometric Integrity -> Substrate
+ *   Shallow Trench Isolation (STI)            -> ShallowTrenchIsolation
+ *   High-K Metal Gate (HKMG) Stack             -> HighKMetalGate
+ *   Strain Engineering & Silicides             -> StrainSilicide
+ *   Back-End Copper Damascene & Plugs          -> CopperDamascene
+ *
+ * Strain/silicide is a genuinely separate area from copper damascene even
+ * though both are inspected with the same instrument, and GDD §11 asks for
+ * latency broken down by layer. Folding silicide into copper damascene hid a
+ * whole node area from that breakdown and made the silicide-etch rework look
+ * like a back-end copper step, which it is not — the Ti/TiN contacts are
+ * formed before the copper onramp.
+ */
+export const LAYER_LABELS: Readonly<Record<ProcessLayer, string>> = {
+  Substrate: 'Substrate Preparation',
+  ShallowTrenchIsolation: 'Shallow Trench Isolation',
+  HighKMetalGate: 'High-K Metal Gate',
+  StrainSilicide: 'Strain Engineering & Silicides',
+  CopperDamascene: 'Back-End Copper & Plugs',
+};
 
 /**
  * Defect type -> the routing step at which it can occur.
@@ -42,7 +68,7 @@ export type ProcessLayer = (typeof PROCESS_LAYERS)[number];
  *   Substrate Contamination -> Substrate (pre-gate cleaning)
  *   STI Void                -> Shallow Trench Isolation
  *   Interface Roughness     -> High-K Metal Gate (gate stack)
- *   Silicide Bridging       -> Copper Damascene (backend / silicides)
+ *   Silicide Bridging       -> Strain Engineering & Silicides
  *   Tungsten Plug Void      -> Copper Damascene (plugs)
  */
 export const DEFECT_ROUTING: Readonly<Record<DefectType, ProcessLayer>> = {
@@ -50,7 +76,7 @@ export const DEFECT_ROUTING: Readonly<Record<DefectType, ProcessLayer>> = {
   SubstrateContamination: 'Substrate',
   STIVoid: 'ShallowTrenchIsolation',
   InterfaceRoughness: 'HighKMetalGate',
-  SilicideBridging: 'CopperDamascene',
+  SilicideBridging: 'StrainSilicide',
   TungstenPlugVoid: 'CopperDamascene',
 };
 
@@ -61,11 +87,17 @@ export const DEFECT_ROUTING: Readonly<Record<DefectType, ProcessLayer>> = {
  * step ALONE, never from the defect class. A wafer masked from `STIVoid` by the
  * CMP brake STILL requires ellipsometry, because the traveler does not know the
  * polisher was recalibrated.
+ *
+ * Strain/silicide and copper damascene both demand the electron microscope but
+ * for different GDD §7 reasons — silicide bridging is a surface stringer over
+ * the sidewall spacer, tungsten plug voids are an internal cross-section — so
+ * they stay separate layers that happen to share an instrument.
  */
 export const ROUTING_METROLOGY: Readonly<Record<ProcessLayer, readonly ToolType[]>> = {
   Substrate: ['StylusProfilometer', 'FourPointProbe'],
   ShallowTrenchIsolation: ['SpectroscopicEllipsometry'],
   HighKMetalGate: ['XRayRefractometry'],
+  StrainSilicide: ['ElectronMicroscope'],
   CopperDamascene: ['ElectronMicroscope'],
 };
 

@@ -10,6 +10,7 @@ export * from './rng.js';
 export * from './generation/wafer.js';
 export * from './generation/lot-generator.js';
 export * from './evaluation/disposition.js';
+export * from './assessment/metrology.js';
 export * from './evaluation/scoring.js';
 export * from './assessment/metrics.js';
 export * from './shift/shift-director.js';

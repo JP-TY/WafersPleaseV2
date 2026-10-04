@@ -52,6 +52,77 @@ export interface DispositionResult {
 }
 
 /**
+ * Which tools can actually resolve a given defect type (GDD §13, §11).
+ *
+ * This is the physical basis of "you cannot diagnose what you cannot see". Each
+ * defect is characterised by the evidence it actually leaves:
+ *
+ *   Bowing/Warping            -> surface height. Only a stylus traces topography.
+ *   Substrate contamination   -> sheet-resistance shift from a conductive film.
+ *   Interface roughness       -> sub-surface density/roughness in the gate stack.
+ *   STI void                  -> sub-surface optical density, invisible to a surface scan.
+ *   Silicide bridging         -> a nanometre-scale filament, needs an electron beam.
+ *   Tungsten plug void        -> an open circuit, only a cross-section resolves it.
+ *
+ * The config already names a single `requiredTool` per defect (that is what
+ * enforces compliance). This is the broader set: tools that produce a genuinely
+ * informative reading on that fault, some of which will not satisfy compliance.
+ * Running the WRONG tool is not a compliance strike — it just cannot see the
+ * defect, which is a different (and more instructive) failure.
+ */
+const RESOLVING_TOOLS: Record<string, readonly ToolType[]> = {
+  BowingWarping: ['StylusProfilometer'],
+  SubstrateContamination: ['FourPointProbe', 'StylusProfilometer'],
+  InterfaceRoughness: ['XRayRefractometry', 'SpectroscopicEllipsometry'],
+  STIVoid: ['SpectroscopicEllipsometry', 'XRayRefractometry'],
+  SilicideBridging: ['ElectronMicroscope'],
+  TungstenPlugVoid: ['ElectronMicroscope', 'FourPointProbe'],
+};
+
+/** Can this tool resolve this defect type at all? */
+export function toolCanResolve(tool: ToolType, defectType: string): boolean {
+  return RESOLVING_TOOLS[defectType]?.includes(tool) ?? false;
+}
+
+/**
+ * Failure mode the wafer should be classified as (GDD §3).
+ *
+ * Catastrophic dominates: one open circuit or short makes the whole wafer
+ * catastrophic regardless of any parametric drift riding along with it.
+ */
+export function classifyWaferMode(defectClasses: readonly DefectClass[]): DefectClass | 'clean' {
+  if (defectClasses.includes('Catastrophic')) return 'Catastrophic';
+  if (defectClasses.includes('Parametric')) return 'Parametric';
+  return 'clean';
+}
+
+/**
+ * Did the player treat the wafer's failure mode correctly?
+ *
+ * Deliberately NOT the same question as "was the action right". GDD §3 measures
+ * the player's ability to separate parametric speed drops from catastrophic
+ * open/short structures. Every action is legitimate for a given mode except one:
+ *   - Accepting a catastrophic wafer is always a misclassification. It ships a
+ *     short or an open circuit downstream.
+ *   - Accepting a parametric wafer is a defensible call — it is a yield-margin
+ *     miss, which is precisely what a parametric bin means, and the GDD has the
+ *     player reject those anyway. It is not a failure of mode identification.
+ *   - Rework or Reject are both correct mode handling in either direction.
+ *
+ * So mode classification fails exactly when a catastrophic defect is waved
+ * through, which is also the GDD's most heavily penalised outcome. That keeps
+ * the metric from double-counting the disposition-accuracy penalty.
+ */
+export function modeClassifiedCorrectly(
+  mode: DefectClass | 'clean',
+  playerAction: PlayerAction,
+): boolean {
+  if (mode === 'clean') return true;
+  if (mode === 'Catastrophic') return playerAction !== 'Accept';
+  return true;
+}
+
+/**
  * Compute the correct action for an effective wafer.
  *
  * Reads the rule matrix for each ACTIVE defect's correct action. Reject
