@@ -29,6 +29,52 @@ export const SCREEN_H = 0.575;
 const BENCH_Y = 1.42;
 const BENCH_DEPTH = 0.02;
 
+/**
+ * Mount a portrait panel as a clipboard on a tilted easel.
+ *
+ * `mountBench` assumes a landscape 2:1 instrument screen. A traveler is a
+ * portrait sheet, and forcing it through the landscape mount stretched the text
+ * to the point of being unreadable — so it gets its own geometry: a taller
+ * panel, canted back 22 degrees like a clipboard on a desk easel.
+ */
+export function mountClipboard(scene: Scene, name: string, panel: Panel, w: number, h: number): BenchMount {
+  const root = new TransformNode(`${name}-root`, scene);
+
+  // Tilt lives on an intermediate node so the screen AND its bezel share it.
+  // Tilting only the screen left the bezel standing vertical behind it, which
+  // showed as a large black slab jutting out of the top of the clipboard.
+  const tilt = new TransformNode(`${name}-tilt`, scene);
+  tilt.parent = root;
+  tilt.position = new Vector3(0, BENCH_Y + 0.02, 0);
+  // Canted back so it faces an operator looking slightly down at the bench.
+  tilt.rotation.x = -0.34;
+
+  const frame = bezel(scene, `${name}-bezel`, w, h, 0.02);
+  frame.parent = tilt;
+  frame.position = new Vector3(0, 0, 0.03);
+
+  const screen = screenFromPanel(scene, panel.texture, `${name}-screen`, w, h);
+  screen.parent = tilt;
+  screen.position = new Vector3(0, 0, 0);
+
+  // Easel legs, upright and NOT tilted, so the sheet is actually held up.
+  for (const sx of [-1, 1]) {
+    const leg = CreateBox(`${name}-leg-${sx}`, { width: 0.018, height: 0.14, depth: 0.018 }, scene);
+    leg.parent = root;
+    leg.position = new Vector3(sx * (w / 2 - 0.035), BENCH_Y - 0.05, 0.05);
+    leg.rotation.x = -0.34;
+    leg.material = matte(scene, `${name}-leg-mat-${sx}`, new Color3(0.2, 0.21, 0.24), 0.24);
+  }
+
+  return {
+    root,
+    screen,
+    setVisible(visible: boolean) {
+      root.setEnabled(visible);
+    },
+  };
+}
+
 export function mountBench(scene: Scene, name: string, panel: Panel): BenchMount {
   const root = new TransformNode(`${name}-root`, scene);
 

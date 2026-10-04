@@ -275,3 +275,62 @@ describe('property: readings are finite, in-range-typed, and never NaN', () => {
     }
   });
 });
+describe('a clean reading says WHICH kind of clean (GDD §11 coaching)', () => {
+  /**
+   * The two "found nothing" cases are physically different and the player has to
+   * act differently:
+   *
+   *   subResolution — the defect is smaller than the technique can ever resolve.
+   *                  The only fix is a different instrument.
+   *   marginal      — the defect was inside this technique's reach and the
+   *                  per-wafer detection roll missed it. Re-measuring, or a
+   *                  second instrument, can find it.
+   *
+   * Collapsing these into one flag (as an earlier version did) told a player to
+   * swap instruments when the right move was to look again.
+   */
+  it('a defect under the resolution floor reports subResolution, not marginal', () => {
+    const spec = TOOL_SPECS.ElectronMicroscope;
+    const r = measure(wafer('SilicideBridging', 'Catastrophic', spec.resolutionLimit * 0.4), 'ElectronMicroscope');
+    expect(r.resolved).toHaveLength(0);
+    expect(r.subResolution).toBe(true);
+    // A feature this small is invisible to the technique, not merely missed.
+    expect(r.marginal).toBe(false);
+  });
+
+  it('a rolled miss reports marginal, not subResolution', () => {
+    // Walk wafers until one produces a roll miss (in reach but not caught).
+    let sawMarginal = false;
+    for (let i = 0; i < 200 && !sawMarginal; i++) {
+      const r = measure(wafer('SilicideBridging', 'Catastrophic', 0.95, { index: i }), 'ElectronMicroscope');
+      if (r.resolved.length === 0) {
+        expect(r.subResolution).toBe(false);
+        expect(r.marginal).toBe(true);
+        sawMarginal = true;
+      }
+    }
+    expect(sawMarginal).toBe(true);
+  });
+
+  it('a clean wafer is neither', () => {
+    const r = measure(wafer('SilicideBridging', 'Catastrophic', 0.9, { defects: [] }), 'ElectronMicroscope');
+    expect(r.subResolution).toBe(false);
+    expect(r.marginal).toBe(false);
+    expect(r.resolved).toHaveLength(0);
+  });
+
+  it('confidence reports the technique competence, not a per-pass score', () => {
+    // A hard defect this instrument is the right tool for: the ceiling is 0.98 x
+    // 0.74 = 0.7252, reported whether or not this particular pass caught it.
+    const caught = measure(wafer('SilicideBridging', 'Catastrophic', 0.95), 'ElectronMicroscope');
+    const missed = measure(wafer('SilicideBridging', 'Catastrophic', 0.95, { index: 3 }), 'ElectronMicroscope');
+    expect(caught.confidence).toBeCloseTo(0.7252, 3);
+    // Reporting 0 for a missed pass would make a good measurement look failed.
+    expect(missed.confidence).toBeCloseTo(0.7252, 3);
+  });
+
+  it('confidence is 0 only when there was nothing to look for', () => {
+    const r = measure(wafer('SilicideBridging', 'Catastrophic', 0.9, { defects: [] }), 'ElectronMicroscope');
+    expect(r.confidence).toBe(0);
+  });
+});

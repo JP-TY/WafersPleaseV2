@@ -339,7 +339,14 @@ export class RcaBench {
 
 const inBand = (t: number, spec: { min: number; max: number }): boolean => t >= spec.min && t <= spec.max;
 
-function wrap(text: string, width: number): string[] {
+/**
+ * Word-wrap to a character count.
+ *
+ * Panels mix monospace and proportional faces, so a char count is an
+ * approximation — good enough for the wrapped bodies on these screens, and it
+ * keeps layout code from having to measure text on every repaint.
+ */
+export function wrap(text: string, width: number): string[] {
   const words = text.split(/\s+/);
   const lines: string[] = [];
   let line = '';
@@ -354,5 +361,3 @@ function wrap(text: string, width: number): string[] {
   if (line.trim()) lines.push(line.trim());
   return lines;
 }
-
-export { wrap };

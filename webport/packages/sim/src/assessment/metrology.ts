@@ -178,10 +178,22 @@ export interface MetrologyReading {
   readonly confidence: number;
   readonly latencySeconds: number;
   /**
-   * Defect present but smaller than the instrument's resolution. Drives the
-   * GDD callout: "deviation is at the edge of what this tool can see".
+   * A defect was present but smaller than this instrument's resolution floor.
+   *
+   * Distinct from `marginal`: this is a statement about the technique. No pass
+   * with this tool could ever see it, which is the GDD's "at the edge of what
+   * this tool can show you" — the player must change instrument.
    */
   readonly subResolution: boolean;
+  /**
+   * A defect was within this technique's resolution but was not caught on this
+   * pass (the per-wafer detection roll missed). The instrument COULD have seen
+   * it. Re-measuring, or cross-checking with a second instrument, is the answer.
+   *
+   * Kept apart from `subResolution` because conflating them would tell a player
+   * to swap instruments when the right move is to look again.
+   */
+  readonly marginal: boolean;
 }
 
 export interface ResolvedDefect {
@@ -235,6 +247,7 @@ export function measure(wafer: EffectiveWafer, tool: ToolType): MetrologyReading
 
   const resolved: ResolvedDefect[] = [];
   let subResolution = false;
+  let marginal = false;
   let worstConfidence = 0;
 
   for (const d of resolvable) {
@@ -249,10 +262,8 @@ export function measure(wafer: EffectiveWafer, tool: ToolType): MetrologyReading
     const ceiling = spec.detectionCeiling * DEG[detectDifficultyFor(d.defectType)]!;
     const roll = detectionRoll(wafer.index, tool, d.defectType);
     if (roll > ceiling) {
-      // Within this technique's ability but not caught on this pass. Not
-      // silently dropped: it lowers the reported confidence so a marginal
-      // reading reads as marginal rather than as a clean bill of health.
-      subResolution = true;
+      // Within this technique's ability but not caught on this pass.
+      marginal = true;
       continue;
     }
 
@@ -288,9 +299,13 @@ export function measure(wafer: EffectiveWafer, tool: ToolType): MetrologyReading
     outOfSpec,
     resolved,
     invisible,
-    confidence: worstConfidence,
+    // Confidence is the technique's competence on what it was asked to find, not
+    // a score for this pass. Reporting 0 when a clean wafer reads clean would
+    // make a genuinely good measurement look like a failed one.
+    confidence: resolvable.length > 0 ? Math.min(...resolvable.map((d) => spec.detectionCeiling * DEG[detectDifficultyFor(d.defectType)]!)) : 0,
     latencySeconds: spec.latencySeconds,
     subResolution,
+    marginal,
   };
 }
 

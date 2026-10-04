@@ -35,6 +35,37 @@ export interface Stage {
   canvas: HTMLCanvasElement;
 }
 
+/**
+ * Frame the inspection workspace.
+ *
+ * The old default framed a single instrument at bench height. The workspace is
+ * wider than it is tall — wafer stage centre, clipboard left, stamp bank right,
+ * instrument rack above and behind, briefing board on the back wall — so the
+ * camera sits back far enough to hold all of it, and looks slightly downward at
+ * a seated eye height. Set from `main.ts` via `frameWorkspace`.
+ */
+export function frameWorkspace(camera: ArcRotateCamera, opts: { phase?: string } = {}): void {
+  // alpha = -PI/2 puts the viewer on -Z looking toward +Z, matching LAYOUT in
+  // inspection/bay.ts. beta is measured from +Y, so beta = PI/2 is horizontal.
+  const reading = opts.phase === 'Briefing' || opts.phase === 'Debrief' || opts.phase === 'Complete';
+  camera.alpha = -Math.PI / 2;
+  if (reading) {
+    // The paperwork phases look at the board on the back wall, from far enough
+    // back that the full 1.86 m panel fits in frame.
+    camera.setTarget(new Vector3(0, 1.98, 1.9));
+    camera.beta = 1.5;
+    camera.radius = 2.1;
+  } else {
+    // Working view: wafer stage centred, clipboard and stamps flanking, rack
+    // above. Pitched down a little, from a seated eye height.
+    camera.setTarget(new Vector3(0, 1.46, 0.12));
+    camera.beta = 1.31;
+    camera.radius = 2.05;
+  }
+  camera.lowerRadiusLimit = 0.8;
+  camera.upperRadiusLimit = 4;
+}
+
 export function createStage(canvas: HTMLCanvasElement): Stage {
   // WebGL2 is the required production renderer for WebXR: WebGPU-in-WebXR is
   // still experimental in Quest Browser, so WebGPU stays a feature-detected

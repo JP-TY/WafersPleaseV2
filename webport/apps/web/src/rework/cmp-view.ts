@@ -28,6 +28,7 @@ import {
   value,
   type PanelCtx,
 } from '../ui/panel.js';
+import { wrap as wrapText } from './rca-view.js';
 import { mountBench, pickPanel, type BenchMount } from '../ui/bench.js';
 import { PROCESS } from '@wafers/sim';
 import {
@@ -40,7 +41,6 @@ import {
   type CmpState,
   type ReworkMinigame,
 } from '@wafers/sim';
-import { wrap } from './rca-view.js';
 
 const W = 1024;
 const H = 512;
@@ -300,7 +300,7 @@ export class CmpBench {
     });
 
     let y = 216;
-    for (const line of wrap(r.detail, 78)) {
+    for (const line of wrapText(r.detail, 78)) {
       label(c, line, W / 2, y, { size: 14, color: C.text, align: 'center' });
       y += 22;
     }
