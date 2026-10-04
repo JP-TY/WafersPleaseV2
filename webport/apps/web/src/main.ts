@@ -89,7 +89,9 @@ const session = new ShiftSession(
   scene,
   { days: DAYS, rules: MATRICES, defects: DEFECTS, tools: TOOLS, scoring: SCORING, seed: run.seed },
   benches,
+  camera,
 );
+session.onStationRestore = () => frameWorkspace(camera, { phase: session.currentPhase });
 if (dayParam > 1) session.skipToDay(dayParam);
 session.setReworkBenches(benches);
 if (!forcedStation) for (const b of Object.values(benches)) b.setVisible(false);
@@ -97,6 +99,7 @@ if (!forcedStation) for (const b of Object.values(benches)) b.setVisible(false);
 if (forcedStation && forcedStation in benches) {
   benches[forcedStation]!.setVisible(true);
   session.beginShift();
+  benches[forcedStation]!.frameCamera?.(camera);
 }
 
 // ---------------------------------------------------------------------------

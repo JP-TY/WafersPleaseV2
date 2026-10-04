@@ -480,3 +480,48 @@ function quatFromAxisAngle(axis: Vector3, angle: number): Quaternion {
   const s = Math.sin(angle / 2);
   return new Quaternion(axis.x * s, axis.y * s, axis.z * s, Math.cos(angle / 2));
 }
+
+/**
+ * Deterministic camera framing for a bench.
+ *
+ * The previous RCA attempt failed because the framing was done by hand from the
+ * console: the camera's `lowerRadiusLimit` was 0.8 m, set for the room-wide
+ * inspection view, so every attempt to move in closer was silently CLAMPED back
+ * to 0.8 m and the tanks were never framed the way the screenshots assumed. The
+ * limit has to move with the framing.
+ *
+ * `frameStation` therefore sets the limits as well as the angles, and each bench
+ * calls it rather than relying on whoever is driving the camera to get it right.
+ */
+export function frameStation(
+  camera: import('@babylonjs/core/Cameras/arcRotateCamera.js').ArcRotateCamera,
+  opts: { target: Vector3; alpha?: number; beta?: number; radius: number; minRadius?: number; maxRadius?: number },
+): void {
+  const alpha = opts.alpha ?? -Math.PI / 2;
+  const beta = opts.beta ?? 1.16;
+  // A seated operator looking down at a bench. 1.16 rad is ~24 degrees above
+  // horizontal, which is roughly where a pair of eyes sit over a wet bench.
+  camera.setTarget(opts.target);
+  camera.alpha = alpha;
+  camera.beta = beta;
+  // Limits FIRST: assigning a radius outside the old limits is clamped.
+  camera.lowerRadiusLimit = opts.minRadius ?? Math.max(0.18, opts.radius * 0.6);
+  camera.upperRadiusLimit = opts.maxRadius ?? opts.radius * 2.6;
+  camera.radius = opts.radius;
+}
+
+/**
+ * Clearance check used by the tests.
+ *
+ * A bench is only readable if its working parts are not inside the bench top, so
+ * this is worth asserting in code rather than discovering it in a screenshot: a
+ * previous build drove half the clipboard sheet through the bench surface and the
+ * protruding wedge read as a stray object.
+ */
+export function clearanceAbove(
+  benchTopY: number,
+  partCentreY: number,
+  halfHeight: number,
+): number {
+  return partCentreY - halfHeight - benchTopY;
+}

@@ -68,6 +68,15 @@ export type ShiftPhase =
 export interface ReworkBenchHandle {
   setVisible(visible: boolean): void;
   update(dt: number): void;
+  /**
+   * Frame the bench. Optional so a test double need not provide it.
+   *
+   * Each bench owns this because the camera limits in use for the room-wide
+   * inspection view clamp a close bench view back out to 0.8 m — every attempt
+   * to move in closer was silently reverted, which is what made the first 3D RCA
+   * attempt impossible to frame.
+   */
+  frameCamera?(camera: import('@babylonjs/core/Cameras/arcRotateCamera.js').ArcRotateCamera): void;
 }
 
 const HOTKEY_TOOLS: ReadonlyArray<readonly [string, ToolType]> = [
@@ -143,11 +152,15 @@ export class ShiftSession {
   onStateChange: () => void = () => {};
   /** Fired when the campaign's day or pass/fail state changes. */
   onProgressionChange: () => void = () => {};
+  /** Fired after a rework bench closes, so the caller can restore the station view. */
+  onStationRestore: () => void = () => {};
 
   constructor(
     scene: Scene,
     cfg: ShiftConfig,
     reworkBenches: Record<string, ReworkBenchHandle>,
+    /** The active camera, so a bench can frame itself when it opens. */
+    private readonly camera?: import('@babylonjs/core/Cameras/arcRotateCamera.js').ArcRotateCamera,
   ) {
     this.allDefects = cfg.defects;
 
@@ -672,6 +685,8 @@ export class ShiftSession {
     bench.setVisible(true);
     this.stamps.setEnabled(false);
     this.setStationVisible(false);
+    if (bench.frameCamera && this.camera) bench.frameCamera(this.camera);
+    this.onStateChange();
   }
 
   /**
@@ -687,6 +702,8 @@ export class ShiftSession {
     this.reworkBench = null;
     this.stamps.setEnabled(true);
     this.setStationVisible(true);
+    // Hand the camera back to the station's working view.
+    this.onStationRestore?.();
 
     if (this.currentWaferIndex >= 0) {
       this.director.resolveRework(this.currentWaferIndex, { success, quality: success ? 0.9 : 0 });

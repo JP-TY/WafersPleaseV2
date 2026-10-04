@@ -36,6 +36,7 @@ import { mountBench, type BenchMount, BENCH_Y } from '../ui/bench.js';
 import { housing, Knob, nameplate, screws, telltales } from '../scene/physical.js';
 import { steel } from '../scene/lighting.js';
 import { WAFER_RADIUS } from '../inspection/wafer-stage.js';
+import { frameStation } from '../scene/physical.js';
 import {
   rcaRemovalFraction,
   realMinutes,
@@ -49,13 +50,13 @@ const H = 460;
 
 /** Bath colours: SC-1 alkaline peroxide is faintly amber, SC-2 acid is clear. */
 const LIQUID: Record<'sc1' | 'sc2' | 'qdr', string> = {
-  sc1: '#c9a227',
-  sc2: '#9fd8d0',
-  qdr: '#b8d4e8',
+  sc1: '#d8a521',
+  sc2: '#8fe0d2',
+  qdr: '#a8cfe8',
 };
 
-const TANK_R = 0.1;
-const TANK_H = 0.17;
+const TANK_R = 0.135;
+const TANK_H = 0.24;
 
 /** One bath: a tank, liquid, heater coil, and a thermometer. */
 class Bath {
@@ -241,22 +242,22 @@ export class RcaBench {
     this.fork = new TransformNode('rca-fork', scene);
     this.fork.parent = this.root;
     const armMat = steel(scene, 'rca-fork-arm-mat', '#c2ccd8');
-    const arm = CreateBox('rca-fork-arm', { width: 0.42, height: 0.008, depth: 0.012 }, scene);
+    const arm = CreateBox('rca-fork-arm', { width: 0.46, height: 0.008, depth: 0.012 }, scene);
     arm.parent = this.fork;
-    arm.position = new Vector3(0, 0.235, 0.11);
+    arm.position = new Vector3(0, 0.315, 0.14);
     arm.material = armMat;
-    const column = CreateCylinder('rca-fork-column', { diameter: 0.014, height: 0.22, tessellation: 12 }, scene);
+    const column = CreateCylinder('rca-fork-column', { diameter: 0.014, height: 0.28, tessellation: 12 }, scene);
     column.parent = this.fork;
-    column.position = new Vector3(0.2, 0.235, 0.11);
+    column.position = new Vector3(0.2, 0.315, 0.14);
     column.material = armMat;
     const crossBar = CreateBox('rca-fork-cross', { width: 0.012, height: 0.008, depth: 0.2 }, scene);
     crossBar.parent = this.fork;
-    crossBar.position = new Vector3(0, 0.229, 0.02);
+    crossBar.position = new Vector3(0, 0.306, 0.03);
     crossBar.material = armMat;
 
     this.forkWafer = CreateCylinder('rca-wafer', { diameter: WAFER_RADIUS * 2, height: 0.0008, tessellation: 48 }, scene);
     this.forkWafer.parent = this.fork;
-    this.forkWafer.position = new Vector3(0, 0.222, 0.02);
+    this.forkWafer.position = new Vector3(0, 0.3, 0.02);
     const waferMat = new PBRMaterial('rca-wafer-mat', scene);
     waferMat.albedoColor = new Color3(0.1, 0.11, 0.14);
     waferMat.metallic = 0.7;
@@ -294,16 +295,14 @@ export class RcaBench {
       post.material = steel(scene, 'rca-hood-post-mat', '#8f99a5');
     }
     // Raked forward and down over the baths rather than straight down.
-    const lamp = new SpotLight(
-      'rca-hood-lamp',
-      new Vector3(0, 0.43, -0.2),
-      new Vector3(0, -0.62, 0.78).normalize(),
-      1.9,
-      3,
-      scene,
-    );
-    lamp.intensity = 7;
+    const lamp = new SpotLight('rca-hood-lamp', Vector3.Zero(), Vector3.Up(), 1.9, 3, scene);
+    lamp.intensity = 14;
     lamp.diffuse = new Color3(1, 0.98, 0.92);
+    // Parented, or the light sits at floor level 1.4 m under the bench and the
+    // whole station renders dark no matter how high the intensity goes.
+    lamp.parent = this.root;
+    lamp.position = new Vector3(0, 0.43, -0.2);
+    lamp.direction = new Vector3(0, -0.62, 0.78).normalize();
 
     nameplate(scene, this.root, 'rca-nameplate', 'RCA-1  DUAL-TANK WET BENCH', 0.34, new Vector3(0, 0.028, 0.215));
     screws(scene, this.root, 'rca-screw', 0.5, 0.19, 0.025, 4);
@@ -348,6 +347,23 @@ export class RcaBench {
     this.readout.setVisible(visible);
   }
 
+  /**
+   * Frame the bench from a seated operator.
+   *
+   * The bench owns this rather than leaving it to the caller: the camera limits
+   * used for the room-wide inspection view clamp a close bench view back out to
+   * 0.8 m, which is why the baths could not be framed from the console.
+   */
+  frameCamera(camera: import('@babylonjs/core/Cameras/arcRotateCamera.js').ArcRotateCamera): void {
+    frameStation(camera, {
+      // Halfway up the tanks: the operator looks at the chemistry, not the deck.
+      target: new Vector3(0, BENCH_Y + TANK_H * 0.55, 0),
+      alpha: -Math.PI / 2,
+      beta: 1.14,
+      radius: 0.62,
+    });
+  }
+
   update(dt: number): void {
     const s = this.sim.state;
     void dt;
@@ -359,7 +375,7 @@ export class RcaBench {
 
     // Move the fork to whichever bath the current step uses.
     const target = s.step.kind === 'SC1' ? -0.3 : s.step.kind === 'SC2' ? 0.3 : 0;
-    const lift = s.immersed ? 0.06 : TANK_H + 0.08;
+    const lift = s.immersed ? 0.08 : TANK_H + 0.1;
     this.fork.position.x += (target - this.fork.position.x) * Math.min(1, dt * 6);
     this.fork.position.y += (lift - this.fork.position.y) * Math.min(1, dt * 6);
 
