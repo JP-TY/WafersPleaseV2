@@ -30,6 +30,7 @@ import {
   type ReworkResult,
 } from './process.js';
 import type { Rng } from '../rng.js';
+import type { Recipe } from './recipes.js';
 
 export type RcaStepKind = 'SC1' | 'QDR1' | 'SC2' | 'QDR2';
 
@@ -76,7 +77,8 @@ export type RcaAction =
   | { type: 'immerse' }
   | { type: 'withdraw' };
 
-const STEPS: readonly RcaStep[] = [
+/** The built-in step table, kept for reference and as the no-config default. */
+const BUILTIN_STEPS: readonly RcaStep[] = [
   {
     kind: 'SC1',
     label: 'SC-1 — ALKALINE ORGANIC / PARTICLE CLEAN',
@@ -115,6 +117,28 @@ const STEPS: readonly RcaStep[] = [
   },
 ];
 
+/**
+ * Build the step table, optionally from an authored recipe.
+ *
+ * The config supplies the WINDOWS the player is graded against. That is the
+ * point of routing it through here rather than leaving STEPS as a constant: edit
+ * a temperature window in `packages/data/config/rework.json` and the simulation
+ * changes what it enforces, instead of the data asset and the running game
+ * disagreeing with nothing to detect it.
+ */
+export function buildRcaSteps(recipe?: Recipe): readonly RcaStep[] {
+  if (!recipe) return BUILTIN_STEPS;
+  return recipe.steps.map((s) => ({
+    kind: s.key as RcaStepKind,
+    label: s.label,
+    chemistry: s.chemistry,
+    removes: s.removes,
+    targetC: s.targetC,
+    realDwellMinutes: s.realDwellMinutes,
+    dwellSeconds: s.dwellSeconds,
+  }));
+}
+
 /** How many times the whole step sequence may be attempted. */
 export const RCA_MAX_ATTEMPTS = 1;
 
@@ -125,13 +149,19 @@ export const RCA_MAX_ATTEMPTS = 1;
  * fresh attempt and a retry is that the player now knows the recipe, which is
  * exactly the competence the training is meant to build.
  */
-export const createRcaClean = (rng: Rng, difficulty: number): ReworkMinigame<RcaCleanState, RcaAction> => {
+export const createRcaClean = (
+  rng: Rng,
+  difficulty: number,
+  recipe?: Recipe,
+): ReworkMinigame<RcaCleanState, RcaAction> => {
   void rng;
   void difficulty;
 
+  const steps = buildRcaSteps(recipe);
+
   const state: RcaCleanState = {
     stepIndex: 0,
-    step: STEPS[0]!,
+    step: steps[0]!,
     baths: {
       sc1: {
         label: PROCESS.rca.sc1.name,
@@ -200,7 +230,7 @@ export const createRcaClean = (rng: Rng, difficulty: number): ReworkMinigame<Rca
 
   const advanceStep = (): void => {
     state.stepIndex++;
-    state.step = STEPS[state.stepIndex] ?? STEPS[STEPS.length - 1]!;
+    state.step = steps[state.stepIndex] ?? steps[steps.length - 1]!;
     state.dwellSeconds = 0;
     state.immersed = false;
     state.active = state.step.kind === 'SC2' ? 'sc2' : state.step.kind === 'QDR1' || state.step.kind === 'QDR2' ? 'qdr' : 'sc1';
@@ -307,7 +337,7 @@ export const createRcaClean = (rng: Rng, difficulty: number): ReworkMinigame<Rca
     }
 
     // Step passed.
-    if (state.stepIndex >= STEPS.length - 1) {
+    if (state.stepIndex >= steps.length - 1) {
       // Reward a step that finished close to its window without surplus exposure.
       const quality = clamp01(1 - damage / Math.max(PROCESS.rca.damageLimit * 2, 1e-6));
       resolve({
@@ -339,4 +369,4 @@ export const createRcaClean = (rng: Rng, difficulty: number): ReworkMinigame<Rca
 };
 
 /** Exposed for the tutorial panel and the debrief copy. */
-export const RCA_STEPS = STEPS;
+export const RCA_STEPS = BUILTIN_STEPS;
