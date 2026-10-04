@@ -16,8 +16,6 @@
  */
 
 import type { Scene } from '@babylonjs/core/scene.js';
-import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder.js';
-import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import {
   C,
   MONO,
@@ -28,9 +26,8 @@ import {
   plate,
   type PanelCtx,
 } from '../ui/panel.js';
-import { screenFromPanel } from '../scene.js';
-import { painted } from '../scene/lighting.js';
 import { LAYOUT } from './bay.js';
+import { mountNoticeBoard } from './boards.js';
 import { wrap } from '../rework/rca-view.js';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
 import type { Campaign } from '@wafers/sim';
@@ -41,7 +38,6 @@ const PH = 620;
 export class ProgressionBoard {
   private readonly panel: Panel;
   private readonly screen: AbstractMesh;
-  private readonly slab: AbstractMesh;
 
   private campaign: Campaign | null = null;
   private showResults = false;
@@ -49,15 +45,11 @@ export class ProgressionBoard {
   constructor(scene: Scene) {
     this.panel = new Panel('progression-panel', { width: PW, height: PH, scale: 1.3 });
 
-    // Centred on the wall, the same spot as the briefing and incident boards.
-    // Those are all mutually exclusive by phase, so sharing the mount is safe and
-    // keeps the record board dead ahead of the operator rather than off to one side.
-    this.slab = CreateBox('progression-slab', { width: 1.86, height: 1.16, depth: 0.05 }, scene);
-    this.slab.position = LAYOUT.board.add(new Vector3(0, 0, 0.045));
-    this.slab.material = painted(scene, 'progression-slab-mat', '#1f232b', 0.6);
-
-    this.screen = screenFromPanel(scene, this.panel.texture, 'progression-screen', 1.76, 1.06);
-    this.screen.position = LAYOUT.board.clone();
+    // The SAME physical construction as the briefing and incident boards: a
+    // printed sheet in an aluminium frame under glass. This used to be its own
+    // emissive panel, which made the training record the one television on the
+    // wall — a small thing that undid the point of the whole exercise.
+    this.screen = mountNoticeBoard(scene, 'progression', this.panel, LAYOUT.board.clone());
 
     this.setVisible(false);
   }
@@ -69,12 +61,11 @@ export class ProgressionBoard {
   }
 
   setVisible(visible: boolean): void {
-    this.screen.setEnabled(visible);
-    this.slab.setEnabled(visible);
+    this.screen.parent?.setEnabled(visible);
   }
 
   get isVisible(): boolean {
-    return this.screen.isEnabled();
+    return this.screen.parent?.isEnabled() === true;
   }
 
   update(): void {

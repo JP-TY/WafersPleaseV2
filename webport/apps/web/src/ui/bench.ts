@@ -9,13 +9,17 @@
 
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder.js';
+import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
+import { CreateCylinder } from '@babylonjs/core/Meshes/Builders/cylinderBuilder.js';
+import type { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import type { Scene } from '@babylonjs/core/scene.js';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
 import type { Panel } from './panel.js';
 import { bezel, matte, screenFromPanel } from '../scene.js';
-import { painted } from '../scene/lighting.js';
+import { steel } from '../scene/lighting.js';
+import { paper, cardboard } from '../scene/physical.js';
 
 export interface BenchMount {
   /** Parent node — move or hide this to take the whole station off-stage. */
@@ -27,7 +31,7 @@ export interface BenchMount {
 
 export const SCREEN_W = 1.15;
 export const SCREEN_H = 0.575;
-const BENCH_Y = 1.42;
+export const BENCH_Y = 1.42;
 const BENCH_DEPTH = 0.02;
 
 /**
@@ -35,43 +39,64 @@ const BENCH_DEPTH = 0.02;
  *
  * `mountBench` assumes a landscape 2:1 instrument screen. A traveler is a
  * portrait sheet, and forcing it through the landscape mount stretched the text
- * to the point of being unreadable — so it gets its own geometry: a taller
- * panel, canted back 22 degrees like a clipboard on a desk easel.
+ * to the point of being unreadable — so it gets its own geometry.
+ *
+ * More importantly the sheet is DIFFUSE PAPER, not an emissive panel. That is the
+ * difference between a clipboard and a monitor showing a picture of one: lit paper
+ * catches the room light, receives shadow, and dims when the lamps dim. An
+ * emissive "printed form" cannot do any of those, which is why it reads as a
+ * screen no matter how much paper texture is painted onto it.
  */
 export function mountClipboard(scene: Scene, name: string, panel: Panel, w: number, h: number): BenchMount {
   const root = new TransformNode(`${name}-root`, scene);
 
-  // Tilt lives on an intermediate node so the screen AND its bezel share it.
-  // Tilting only the screen left the bezel standing vertical behind it, which
-  // showed as a large black slab jutting out of the top of the clipboard.
+  // Tilt lives on an intermediate node so the sheet AND its backing share it.
   const tilt = new TransformNode(`${name}-tilt`, scene);
   tilt.parent = root;
-  tilt.position = new Vector3(0, BENCH_Y + 0.02, 0);
+  // Raise the pivot by half the sheet height so the BOTTOM EDGE clears the bench
+  // top. Centring the sheet on the bench surface drove its lower half through the
+  // bench, and the part that poked out read as a stray wedge of paper.
+  tilt.position = new Vector3(0, BENCH_Y + (h / 2) * Math.cos(0.34) + 0.012, 0.012);
   // Positive: the top edge tips TOWARD the operator, so the sheet faces up and
   // out of the bench. Negative pointed the normal down and away from the player.
   tilt.rotation.x = 0.34;
 
-  const frame = CreateBox(`${name}-bezel`, { width: w + 0.03, height: h + 0.03, depth: 0.018 }, scene);
-  frame.parent = tilt;
-  frame.position = new Vector3(0, 0, 0.028);
-  frame.material = painted(scene, `${name}-bezel-mat`, '#2b303a', 0.55);
+  const sheet = CreatePlane(`${name}-sheet`, { width: w, height: h }, scene);
+  sheet.parent = tilt;
+  sheet.material = paper(scene, `${name}-paper-mat`, panel.texture as unknown as DynamicTexture);
 
-  const screen = screenFromPanel(scene, panel.texture, `${name}-screen`, w, h);
-  screen.parent = tilt;
-  screen.position = new Vector3(0, 0, 0);
+  // Greyboard backing, so the sheet has thickness and an edge when seen from the side.
+  const back = CreateBox(`${name}-back`, { width: w + 0.005, height: h + 0.005, depth: 0.004 }, scene);
+  back.parent = tilt;
+  back.position = new Vector3(0, 0, 0.0035);
+  back.material = cardboard(scene, `${name}-back-mat`);
+
+  // Steel spring clip with a lever. This one detail is most of what says
+  // "clipboard" rather than "framed picture".
+  const clipBar = CreateBox(`${name}-clip`, { width: 0.1, height: 0.022, depth: 0.011 }, scene);
+  clipBar.parent = tilt;
+  clipBar.position = new Vector3(0, h / 2 - 0.011, -0.005);
+  clipBar.material = steel(scene, `${name}-clip-mat`, '#aab4c0');
+
+  const clipLever = CreateCylinder(`${name}-clip-lever`, { diameter: 0.011, height: 0.066, tessellation: 12 }, scene);
+  clipLever.parent = tilt;
+  clipLever.rotation.x = Math.PI / 2;
+  clipLever.position = new Vector3(0, h / 2 - 0.022, -0.011);
+  clipLever.material = steel(scene, `${name}-clip-lever-mat`, '#c2ccd8');
 
   // Easel legs, upright and NOT tilted, so the sheet is actually held up.
   for (const sx of [-1, 1]) {
-    const leg = CreateBox(`${name}-leg-${sx}`, { width: 0.018, height: 0.14, depth: 0.018 }, scene);
+    const leg = CreateBox(`${name}-leg-${sx}`, { width: 0.016, height: 0.13, depth: 0.016 }, scene);
     leg.parent = root;
-    leg.position = new Vector3(sx * (w / 2 - 0.035), BENCH_Y - 0.05, 0.05);
+    leg.position = new Vector3(sx * (w / 2 - 0.035), BENCH_Y - 0.05, 0.07);
     leg.rotation.x = 0.34;
-    leg.material = matte(scene, `${name}-leg-mat-${sx}`, new Color3(0.2, 0.21, 0.24), 0.24);
+    leg.material = steel(scene, `${name}-leg-mat-${sx}`, '#6d757f');
   }
 
   return {
     root,
-    screen,
+    // The pickable surface is the sheet itself.
+    screen: sheet,
     setVisible(visible: boolean) {
       root.setEnabled(visible);
     },

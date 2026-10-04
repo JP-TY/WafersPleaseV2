@@ -34,7 +34,8 @@ import {
   type PanelCtx,
 } from '../ui/panel.js';
 import { screenFromPanel, bezel } from '../scene.js';
-import { painted, rubber, steel } from '../scene/lighting.js';
+import { painted, steel } from '../scene/lighting.js';
+import { Knob, nameplate, pushButton, screws, telltales, vents } from '../scene/physical.js';
 import { pickPanel } from '../ui/bench.js';
 import { LAYOUT } from './bay.js';
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
@@ -69,8 +70,13 @@ interface Screen {
   /** Rolling trace history for the readout line. */
   readonly history: number[];
   reading: MetrologyReading | null;
-  /** Has the player run this instrument on the current wafer yet? */
   measured: boolean;
+  /** The physical RUN key. Pressing it is how the instrument is operated. */
+  readonly run: { mesh: AbstractMesh; setPressed(p: boolean): void };
+  /** Indicator lamp: lit only while the tool is actually running. */
+  readonly lamp: (on: boolean) => void;
+  /** Range trim knob, physically rotatable. */
+  readonly knob: Knob;
 }
 
 export class ClusterView {
@@ -80,6 +86,7 @@ export class ClusterView {
   private readonly screens = new Map<ToolType, Screen>();
 
   constructor(scene: Scene) {
+    this.scene = scene;
     this.root = new TransformNode('metrology-cluster', scene);
     this.root.position = new Vector3(LAYOUT.cluster.x, LAYOUT.cluster.y, LAYOUT.cluster.z);
     // Pitched forward about the rack's lower edge. Without this the panels stood
@@ -104,6 +111,9 @@ export class ClusterView {
     backPanel.parent = this.rack;
     backPanel.position = new Vector3(0, 0.08, 0.05);
     backPanel.material = painted(scene, 'cluster-back-mat', '#20242c', 0.5);
+
+    screws(scene, this.rack, 'cluster-rack-screw', 1.12, 0.02, 0.03, 4);
+    vents(scene, this.rack, 'cluster-rack-vent', 9, 0.03, { width: 0.012, height: 0.014, depth: 0.004 }, new Vector3(-0.12, -0.19, 0.031));
 
     // Standoff posts down to the bench.
     for (const sx of [-1, 1]) {
@@ -138,21 +148,43 @@ export class ClusterView {
       bez.position = new Vector3(x + nx * 0.022, y, nz * 0.022);
       bez.rotation.y = arc;
 
-      // Physical RUN button under each screen: the instrument is a tool you
-      // operate, not a readout you toggle. Recessed, rubber, angled to match.
-      const btn = CreateBox(`cluster-${tool}-run`, { width: 0.11, height: 0.026, depth: 0.07 }, scene);
-      btn.parent = this.rack;
-      btn.position = new Vector3(x + nx * 0.055, y - 0.183, nz * 0.055);
-      btn.rotation.y = arc;
-      btn.material = rubber(scene, `cluster-${tool}-run-mat`, '#2b2f37');
+      // Physical RUN key under each screen. The instrument is a tool you operate,
+      // not a readout you toggle, so the key is a real button with travel and a
+      // lamp beside it, and clicking the SCREEN also works for convenience.
+      const run = pushButton(scene, this.rack, `cluster-${tool}-run`, new Vector3(x + nx * 0.05, y - 0.175, nz * 0.06));
+      const lamp = telltales(scene, this.rack, `cluster-${tool}-lamp`, new Vector3(x + nx * 0.05, y - 0.128, nz * 0.055), [
+        { label: 'RUN', colour: '#5fd68a' },
+      ]);
+      // Range trim, so the faceplate is not a bare screen.
+      const knob = new Knob(scene, this.rack, `cluster-${tool}-trim`, new Vector3(x + nx * 0.11 + 0.04, y - 0.175, nz * 0.06), {
+        radius: 0.017,
+      });
 
-      this.screens.set(tool, { tool, panel, mesh, history: [], reading: null, measured: false });
+      nameplate(scene, this.rack, `cluster-${tool}-plate`, SHORT[tool], 0.17, new Vector3(x, y + 0.2, nz * 0.03));
+
+      this.screens.set(tool, {
+        tool,
+        panel,
+        mesh,
+        history: [],
+        reading: null,
+        measured: false,
+        run,
+        lamp: (on: boolean) => lamp.set(0, on),
+        knob,
+      });
       void key;
     });
 
     scene.onPointerObservable.add((info) => {
       if (info.type !== PointerEventTypes.POINTERDOWN) return;
       for (const s of this.screens.values()) {
+        // The physical key first, so clicking the button does not read as a miss.
+        if (s.run.mesh.isPickable && this.hitMesh(s.run.mesh)) {
+          s.run.setPressed(true);
+          this.onRun(s.tool);
+          return;
+        }
         const at = pickPanel(scene, s.mesh, PW, PH);
         if (at) {
           this.onRun(s.tool);
@@ -164,6 +196,33 @@ export class ClusterView {
 
   /** Called by the owner when the player runs an instrument. */
   onRun: (tool: ToolType) => void = () => {};
+
+  private hitMesh(mesh: AbstractMesh): boolean {
+    const pick = this.scene.pick(this.scene.pointerX, this.scene.pointerY, (m) => m === mesh);
+    return pick?.hit === true;
+  }
+
+  /** Release the RUN key and settle the lamp. Called from the frame update. */
+  releaseRunKeys(): void {
+    for (const s of this.screens.values()) {
+      if (this.active.has(s.tool)) continue;
+      s.run.setPressed(false);
+    }
+  }
+
+  private readonly active = new Set<ToolType>();
+
+  /** Light the lamp on the tool currently running. */
+  setRunning(tool: ToolType | null): void {
+    this.active.clear();
+    for (const s of this.screens.values()) {
+      s.lamp(tool === s.tool);
+      if (tool !== s.tool) s.run.setPressed(false);
+    }
+    if (tool) this.active.add(tool);
+  }
+
+  private readonly scene: Scene;
 
   /** Feed a fresh reading in. */
   setReading(reading: MetrologyReading): void {

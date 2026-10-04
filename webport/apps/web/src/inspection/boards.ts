@@ -14,8 +14,10 @@
 
 import type { Scene } from '@babylonjs/core/scene.js';
 import { CreateBox } from '@babylonjs/core/Meshes/Builders/boxBuilder.js';
+import { CreatePlane } from '@babylonjs/core/Meshes/Builders/planeBuilder.js';
+import { TransformNode } from '@babylonjs/core/Meshes/transformNode.js';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
-import { Color3 } from '@babylonjs/core/Maths/math.color.js';
+import type { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture.js';
 import {
   C,
   MONO,
@@ -27,7 +29,7 @@ import {
   value,
   type PanelCtx,
 } from '../ui/panel.js';
-import { screenFromPanel, matte } from '../scene.js';
+import { anodised, housing, paper, screenGlass, screws } from '../scene/physical.js';
 import { wrap } from '../rework/rca-view.js';
 import { LAYOUT } from './bay.js';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
@@ -37,16 +39,57 @@ import type { DayConfig } from '@wafers/data';
 const BW = 1024;
 const BH = 620;
 
-/** Shared board mounting: a panel on a wall-facing slab. */
-function mountBoard(scene: Scene, name: string, panel: Panel, pos: Vector3): AbstractMesh {
-  // Backing slab goes BEHIND the screen relative to the operator. Screens face
-  // -Z, and the operator is at -Z, so "behind" is the larger +Z.
+/**
+ * Wall-mounted notice board: an aluminium frame around a printed sheet.
+ *
+ * Exported because all four wall-mounted boards must be the SAME object. When
+ * this was private, the training record kept its own emissive-panel mount and
+ * became the one television on the wall.
+ *
+ * This was a glowing panel, which made every briefing look like a wall-mounted
+ * television. A shift briefing in a fab is a printed notice in a frame under a
+ * protective sheet, so that is what it is now: lit paper behind a frame, with
+ * glass over it and screws in the corners.
+ */
+export function mountNoticeBoard(scene: Scene, name: string, panel: Panel, pos: Vector3): AbstractMesh {
+  const root = new TransformNode(`${name}-root`, scene);
+  root.position = pos;
+
+  // Backing panel behind the paper.
   const slab = CreateBox(`${name}-slab`, { width: 1.86, height: 1.16, depth: 0.05 }, scene);
-  slab.position = pos.add(new Vector3(0, 0, 0.045));
-  slab.material = matte(scene, `${name}-slab-mat`, new Color3(0.16, 0.17, 0.2), 0.12);
-  const screen = screenFromPanel(scene, panel.texture, `${name}-screen`, 1.76, 1.06);
-  screen.position = pos;
-  return screen;
+  slab.parent = root;
+  slab.position = new Vector3(0, 0, 0.045);
+  slab.material = housing(scene, `${name}-slab-mat`, '#22262e');
+
+  // The printed sheet itself: diffuse and lit, not emissive.
+  const sheet = CreatePlane(`${name}-sheet`, { width: 1.7, height: 1.0 }, scene);
+  sheet.parent = root;
+  sheet.material = paper(scene, `${name}-paper-mat`, panel.texture as unknown as DynamicTexture);
+
+  // Aluminium frame, proud of the sheet on all four sides.
+  const frameMat = anodised(scene, `${name}-frame-mat`, '#5d656f');
+  const RAILS = [
+    [1.86, 0.06, 0, 0.58],
+    [1.86, 0.06, 0, -0.58],
+    [0.06, 1.1, -0.9, 0],
+    [0.06, 1.1, 0.9, 0],
+  ] as const;
+  RAILS.forEach(([w, h, x, y], i) => {
+    const bar = CreateBox(`${name}-frame-${i}`, { width: w, height: h, depth: 0.055 }, scene);
+    bar.parent = root;
+    bar.position = new Vector3(x, y, 0.02);
+    bar.material = frameMat;
+  });
+
+  // Protective glazing over the sheet: a faint sheen that picks up the room.
+  const glass = CreatePlane(`${name}-glass`, { width: 1.72, height: 1.02 }, scene);
+  glass.parent = root;
+  glass.position = new Vector3(0, 0, 0.006);
+  glass.material = screenGlass(scene, `${name}-glass-mat`);
+
+  screws(scene, root, `${name}-screw`, 0.85, 0.52, 0.052, 4);
+
+  return sheet;
 }
 
 /** GDD §5 phase 1: the shift briefing. */
@@ -57,7 +100,10 @@ export class BriefingView {
 
   constructor(scene: Scene) {
     this.panel = new Panel('briefing-panel', { width: BW, height: BH, scale: 1.3 });
-    this.mesh = mountBoard(scene, 'briefing', this.panel, LAYOUT.board.clone());
+    this.mesh = mountNoticeBoard(scene, 'briefing', this.panel, LAYOUT.board.clone());
+    // Hidden until the shift enters Briefing. A board that is on the wall at load
+    // is a wall-mounted television, which is precisely what these are not.
+    this.mesh.parent?.setEnabled(false);
   }
 
   setDay(day: DayConfig): void {
@@ -66,11 +112,15 @@ export class BriefingView {
   }
 
   setVisible(visible: boolean): void {
-    this.mesh.setEnabled(visible);
     this.mesh.parent?.setEnabled(visible);
   }
 
+  get isVisible(): boolean {
+    return this.mesh.parent?.isEnabled() === true;
+  }
+
   update(): void {
+    if (!this.isVisible) return;
     this.panel.flush((c) => this.paint(c));
   }
 
@@ -156,7 +206,7 @@ export class DebriefView {
 
   constructor(scene: Scene) {
     this.panel = new Panel('debrief-panel', { width: BW, height: BH, scale: 1.3 });
-    this.mesh = mountBoard(scene, 'debrief', this.panel, LAYOUT.board.clone());
+    this.mesh = mountNoticeBoard(scene, 'debrief', this.panel, LAYOUT.board.clone());
     this.mesh.setEnabled(false);
     const slab = this.mesh.parent;
     slab?.setEnabled(false);
@@ -168,11 +218,11 @@ export class DebriefView {
   }
 
   setVisible(visible: boolean): void {
-    this.mesh.setEnabled(visible);
     this.mesh.parent?.setEnabled(visible);
   }
 
   update(): void {
+    if (!this.mesh.parent?.isEnabled()) return;
     this.panel.flush((c) => this.paint(c));
   }
 

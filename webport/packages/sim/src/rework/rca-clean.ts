@@ -139,6 +139,36 @@ export function buildRcaSteps(recipe?: Recipe): readonly RcaStep[] {
   }));
 }
 
+/**
+ * Integrated chemical exposure for the current step.
+ *
+ * Exported because a view has to draw the removal curve, and a view that
+ * recomputes it from `PROCESS` is a second implementation that will eventually
+ * disagree with the simulation it is supposed to be reporting. One function, one
+ * answer.
+ */
+export const rcaExposure = (s: RcaCleanState): number => {
+  if (s.step.kind === 'QDR1' || s.step.kind === 'QDR2') {
+    // A rinse is a transfer function, not a reaction: linear in dwell, with no
+    // Arrhenius term and no attack on the substrate.
+    return (s.dwellSeconds / s.step.dwellSeconds) * PROCESS.rca.completionExposure;
+  }
+  const bath = s.step.kind === 'SC2' ? s.baths.sc2 : s.baths.sc1;
+  const rate =
+    PROCESS.rca.preExponential *
+    arrheniusRatio(bath.temperatureC, s.step.targetC.nominal, PROCESS.rca.activationEnergyJPerMol);
+  return rate * s.dwellSeconds;
+};
+
+/** Fraction of the target film removed. Bounded by 1 by construction. */
+export const rcaRemovalFraction = (s: RcaCleanState): number => 1 - Math.exp(-rcaExposure(s));
+
+/** Surplus exposure past completion, which is substrate attack. */
+export const rcaSubstrateDamage = (s: RcaCleanState): number => {
+  if (s.step.kind === 'QDR1' || s.step.kind === 'QDR2') return 0;
+  return Math.max(0, rcaExposure(s) - PROCESS.rca.completionExposure) * PROCESS.rca.damageCoeff;
+};
+
 /** How many times the whole step sequence may be attempted. */
 export const RCA_MAX_ATTEMPTS = 1;
 
@@ -195,32 +225,16 @@ export const createRcaClean = (
    * version decided it: a player could soak correctly and then slam the heater
    * to 95 in the frame they raised the wafer, and fail.
    */
-  const exposureOf = (s: RcaCleanState): number => {
-    if (s.step.kind === 'QDR1' || s.step.kind === 'QDR2') {
-      // A rinse is a transfer function, not a reaction: linear in dwell, with no
-      // Arrhenius term and no attack on the substrate.
-      return (s.dwellSeconds / s.step.dwellSeconds) * PROCESS.rca.completionExposure;
-    }
-    const bath = bathFor(s);
-    const rate =
-      PROCESS.rca.preExponential *
-      arrheniusRatio(bath.temperatureC, s.step.targetC.nominal, PROCESS.rca.activationEnergyJPerMol);
-    return rate * s.dwellSeconds;
-  };
-
-  /** Fraction of the target species removed. Bounded by 1 by construction. */
-  const removalFraction = (s: RcaCleanState): number => 1 - Math.exp(-exposureOf(s));
-
+  // Delegate to the exported functions so the view and the verdict can never
+  // disagree about how far along the clean is.
+  const removalFraction = rcaRemovalFraction;
   /**
    * Surplus exposure past completion, which is substrate attack.
    *
    * Separate from removal because removal saturates: once the contaminant is
    * gone, more time in the bath does not remove more, it damages.
    */
-  const damageOf = (s: RcaCleanState): number => {
-    if (s.step.kind === 'QDR1' || s.step.kind === 'QDR2') return 0;
-    return Math.max(0, exposureOf(s) - PROCESS.rca.completionExposure) * PROCESS.rca.damageCoeff;
-  };
+  const damageOf = rcaSubstrateDamage;
 
   const resolve = (result: ReworkResult): void => {
     state.finished = true;

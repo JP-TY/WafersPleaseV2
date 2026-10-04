@@ -671,6 +671,7 @@ export class ShiftSession {
     this.reworkBench = bench;
     bench.setVisible(true);
     this.stamps.setEnabled(false);
+    this.setStationVisible(false);
   }
 
   /**
@@ -685,6 +686,7 @@ export class ShiftSession {
     this.reworkBench.setVisible(false);
     this.reworkBench = null;
     this.stamps.setEnabled(true);
+    this.setStationVisible(true);
 
     if (this.currentWaferIndex >= 0) {
       this.director.resolveRework(this.currentWaferIndex, { success, quality: success ? 0.9 : 0 });
@@ -755,6 +757,20 @@ export class ShiftSession {
   // -------------------------------------------------------------------------
   // Frame
   // -------------------------------------------------------------------------
+
+  /**
+   * Show or hide the inspection station as a group.
+   *
+   * Deliberately not `applyPhaseVisibility`, which also drives the phase boards:
+   * a rework takes over the bench without changing phase, so the station has to be
+   * switchable independently of it.
+   */
+  private setStationVisible(visible: boolean): void {
+    this.stage.setVisible(visible);
+    this.traveler.setVisible(visible);
+    this.cluster.setVisible(visible);
+    this.crossDial.mesh.setEnabled(visible);
+  }
 
   private applyPhaseVisibility(): void {
     const inspecting = this.phase === 'Inspection';
