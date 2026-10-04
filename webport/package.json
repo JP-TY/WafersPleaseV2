@@ -3,13 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Wafers Please — Babylon.js 9 / WebXR port. Root of the web workspace.",
+  "description": "Wafers Please \u2014 Babylon.js 9 / WebXR port. Root of the web workspace.",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
     "assets:build": "pnpm --filter @wafers/content assets:build",
     "assets:budget": "pnpm --filter @wafers/content assets:budget",
+    "data:convert": "pnpm --filter @wafers/data convert",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"
   }

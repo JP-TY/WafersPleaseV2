@@ -1,0 +1,35 @@
+{
+  "rework": [
+    {
+      "id": "rework-cmpcalibration",
+      "type": "CMPCalibration",
+      "instructionsText": "CMP calibration rework",
+      "idealTimingSeconds": 60,
+      "toleranceWindowSeconds": 30,
+      "failurePenalty": 1,
+      "stepDescriptions": [
+        "Prepare",
+        "Execute",
+        "Verify"
+      ]
+    },
+    {
+      "id": "rework-rcaclean",
+      "type": "RCAClean",
+      "instructionsText": "",
+      "idealTimingSeconds": 0,
+      "toleranceWindowSeconds": 0,
+      "failurePenalty": 0,
+      "stepDescriptions": []
+    },
+    {
+      "id": "rework-silicide-wet-etch",
+      "type": "RCAClean",
+      "instructionsText": "",
+      "idealTimingSeconds": 0,
+      "toleranceWindowSeconds": 0,
+      "failurePenalty": 0,
+      "stepDescriptions": []
+    }
+  ]
+}

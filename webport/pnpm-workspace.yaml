@@ -11,3 +11,10 @@
 packages:
   - 'packages/*'
   - 'apps/*'
+allowBuilds:
+  esbuild: set this to true or false
+
+# esbuild (a vitest dependency) needs its platform binary's postinstall to run.
+# pnpm blocks build scripts by default; allow just this one.
+onlyBuiltDependencies:
+  - esbuild

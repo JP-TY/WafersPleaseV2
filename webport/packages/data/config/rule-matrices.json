@@ -1,0 +1,55 @@
+{
+  "ruleMatrices": [
+    {
+      "id": "rule-matrix-day-1",
+      "rules": [
+        {
+          "defect": "bowing-warping",
+          "correctAction": "Reject",
+          "ruleText": "Bow/warp beyond flatness spec pushes the surface outside high-NA depth-of-focus. Irreversible structural deformation: REJECT.",
+          "toleranceThreshold": 0.15
+        },
+        {
+          "defect": "substrate-contamination",
+          "correctAction": "Rework",
+          "ruleText": "Resistance spike with organic signature is trace contamination. The wet bench strips it completely: REWORK (RCA clean).",
+          "toleranceThreshold": 0.15
+        }
+      ]
+    },
+    {
+      "id": "rule-matrix-day-2",
+      "rules": [
+        {
+          "defect": "interface-roughness",
+          "correctAction": "Reject",
+          "ruleText": "Interface scattering below baseline mobility is parametric yield failure. No rework restores transconductance: REJECT.",
+          "toleranceThreshold": 0.15
+        },
+        {
+          "defect": "sti-void",
+          "correctAction": "Reject",
+          "ruleText": "STI center-line seam means sub-surface fill failure and inter-device leakage. Cannot be chemically extracted: REJECT / SCRAP.",
+          "toleranceThreshold": 0.15
+        }
+      ]
+    },
+    {
+      "id": "rule-matrix-day-3",
+      "rules": [
+        {
+          "defect": "tungsten-plug-void",
+          "correctAction": "Reject",
+          "ruleText": "Keyhole void in the tungsten plug is an open circuit across backend metallization. Uncorrectable post-deposition: REJECT.",
+          "toleranceThreshold": 0.15
+        },
+        {
+          "defect": "silicide-bridging",
+          "correctAction": "Rework",
+          "ruleText": "Titanium stringer shorts gate to source/drain, but C49-phase residue strips in the ultrasonic wash if caught early: REWORK (silicide etch).",
+          "toleranceThreshold": 0.15
+        }
+      ]
+    }
+  ]
+}

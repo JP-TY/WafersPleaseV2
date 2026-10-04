@@ -1,0 +1,83 @@
+{
+  "convertedBy": "packages/data/scripts/convert-unity-config.mjs",
+  "source": "Assets/Config",
+  "unityEnums": {
+    "DefectClass": [
+      "Parametric",
+      "Catastrophic"
+    ],
+    "DefectType": [
+      "BowingWarping",
+      "STIVoid",
+      "InterfaceRoughness",
+      "SilicideBridging",
+      "TungstenPlugVoid",
+      "SubstrateContamination"
+    ],
+    "DetectionDifficulty": [
+      "Easy",
+      "Medium",
+      "Hard",
+      "Hidden"
+    ],
+    "ActionPath": [
+      "Accept",
+      "Reject",
+      "Rework"
+    ],
+    "ToolType": [
+      "StylusProfilometer",
+      "SpectroscopicEllipsometry",
+      "XRayRefractometry",
+      "ElectronMicroscope",
+      "FourPointProbe"
+    ],
+    "ReworkType": [
+      "RCAClean",
+      "SilicideWetEtch",
+      "CMPCalibration"
+    ],
+    "StampType": [
+      "Accept",
+      "Reject",
+      "Rework"
+    ],
+    "WaferStatus": [
+      "Created",
+      "Arrived",
+      "Inspecting",
+      "Routed"
+    ],
+    "ShiftPhase": [
+      "Briefing",
+      "Inspection",
+      "Break",
+      "Review",
+      "EndOfDay",
+      "Debrief",
+      "Complete"
+    ]
+  },
+  "counts": {
+    "DefectProfileSO": 6,
+    "ToolConfigSO": 5,
+    "DayConfigSO": 3,
+    "RuleMatrixSO": 3,
+    "ReworkConfigSO": 3,
+    "ScoringConfigSO": 1
+  },
+  "unhandledAssets": [
+    "DayEndEvent (GameEventSO)",
+    "DayStartEvent (GameEventSO)",
+    "PhaseChangedEvent (GameEventSO)"
+  ],
+  "problems": [],
+  "warnings": [
+    "rework-rcaclean: instructionsText is empty (unauthored)",
+    "rework-rcaclean: idealTimingSeconds is 0 (unauthored)",
+    "rework-rcaclean: stepDescriptions is empty (unauthored)",
+    "rework-silicide-wet-etch: instructionsText is empty (unauthored)",
+    "rework-silicide-wet-etch: idealTimingSeconds is 0 (unauthored)",
+    "rework-silicide-wet-etch: stepDescriptions is empty (unauthored)"
+  ]
+}

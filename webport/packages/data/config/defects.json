@@ -1,0 +1,132 @@
+{
+  "defects": [
+    {
+      "id": "bowing-warping",
+      "displayName": "Bowing && Warping",
+      "defectClass": "Catastrophic",
+      "defectType": "BowingWarping",
+      "detectionDifficulty": "Easy",
+      "requiredTool": "StylusProfilometer",
+      "defaultAction": "Reject",
+      "reworkAction": "Rework",
+      "severity": 0.85,
+      "toleranceThreshold": 0.15,
+      "diagnosticIndicators": [
+        "Surface topographic distortion lines",
+        "Out-of-range flatness spec",
+        "High-NA lithography focus risk"
+      ],
+      "glossaryEntry": "Substrate bow and warp bend the single-crystal wafer beyond high-NA lithography depth-of-focus, blurring all downstream patterning. Irreversible structural deformation: reject the wafer.",
+      "remediationReferences": [
+        "GDD Section 6 - Substrate Preparation and Geometric Integrity"
+      ]
+    },
+    {
+      "id": "interface-roughness",
+      "displayName": "Interface Traps / Roughness",
+      "defectClass": "Parametric",
+      "defectType": "InterfaceRoughness",
+      "detectionDifficulty": "Medium",
+      "requiredTool": "XRayRefractometry",
+      "defaultAction": "Reject",
+      "reworkAction": "Rework",
+      "severity": 0.6,
+      "toleranceThreshold": 0.15,
+      "diagnosticIndicators": [
+        "Sub-nanometer interface scattering signal",
+        "Abnormal density fluctuation",
+        "Transconductance below baseline"
+      ],
+      "glossaryEntry": "Interface traps snatch charge carriers and degrade channel mobility. Parametric yield failure below baseline device speed: reject.",
+      "remediationReferences": [
+        "GDD Section 6 - High-K Metal Gate (HKMG) Stack"
+      ]
+    },
+    {
+      "id": "sti-void",
+      "displayName": "STI Void / Seam",
+      "defectClass": "Catastrophic",
+      "defectType": "STIVoid",
+      "detectionDifficulty": "Medium",
+      "requiredTool": "SpectroscopicEllipsometry",
+      "defaultAction": "Reject",
+      "reworkAction": "Rework",
+      "severity": 0.8,
+      "toleranceThreshold": 0.15,
+      "diagnosticIndicators": [
+        "Internal center-line trench gap",
+        "Low thin-film optical density band",
+        "Inter-device current leakage"
+      ],
+      "glossaryEntry": "Shallow-trench-isolation fill failure leaves a sub-surface seam that leaks current between devices. Cannot be chemically extracted: reject / scrap.",
+      "remediationReferences": [
+        "GDD Section 6 - Shallow Trench Isolation (STI)"
+      ]
+    },
+    {
+      "id": "silicide-bridging",
+      "displayName": "Silicide Bridging",
+      "defectClass": "Catastrophic",
+      "defectType": "SilicideBridging",
+      "detectionDifficulty": "Hard",
+      "requiredTool": "ElectronMicroscope",
+      "defaultAction": "Rework",
+      "reworkAction": "Rework",
+      "severity": 0.9,
+      "toleranceThreshold": 0.15,
+      "diagnosticIndicators": [
+        "Bright conductive stringer over spacer",
+        "Gate to source/drain short path",
+        "Unreacted C49-phase metal residue"
+      ],
+      "glossaryEntry": "Stray titanium stringers bridge gate to source/drain contacts. Caught early, a selective ultrasonic wet etch strips the C49-phase residue: rework.",
+      "remediationReferences": [
+        "GDD Section 6 - Strain Engineering and Silicides",
+        "GDD Section 8B - Selective Silicide Wet Etch"
+      ]
+    },
+    {
+      "id": "substrate-contamination",
+      "displayName": "Substrate Contamination",
+      "defectClass": "Parametric",
+      "defectType": "SubstrateContamination",
+      "detectionDifficulty": "Easy",
+      "requiredTool": "FourPointProbe",
+      "defaultAction": "Rework",
+      "reworkAction": "Rework",
+      "severity": 0.5,
+      "toleranceThreshold": 0.15,
+      "diagnosticIndicators": [
+        "Local sheet-resistance spike",
+        "Organic film absorption signature",
+        "Threshold voltage fluctuation"
+      ],
+      "glossaryEntry": "Trace organic or metallic films shift threshold voltage across CMOS pairs. Fully cleanable at the standard wet chemical bench: rework (RCA clean).",
+      "remediationReferences": [
+        "GDD Section 6 - Substrate Preparation and Geometric Integrity",
+        "GDD Section 8A - RCA-Clean Sequence"
+      ]
+    },
+    {
+      "id": "tungsten-plug-void",
+      "displayName": "Tungsten Plug Void",
+      "defectClass": "Catastrophic",
+      "defectType": "TungstenPlugVoid",
+      "detectionDifficulty": "Hard",
+      "requiredTool": "ElectronMicroscope",
+      "defaultAction": "Reject",
+      "reworkAction": "Rework",
+      "severity": 0.95,
+      "toleranceThreshold": 0.15,
+      "diagnosticIndicators": [
+        "Internal keyhole void in vertical plug",
+        "Disconnected via core",
+        "Open circuit across metallization"
+      ],
+      "glossaryEntry": "Keyhole voids inside tungsten onramp plugs break backend metallization continuity. Catastrophic and uncorrectable post-deposition: reject.",
+      "remediationReferences": [
+        "GDD Section 6 - Back-End Copper Damascene and Plugs"
+      ]
+    }
+  ]
+}

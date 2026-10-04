@@ -1,0 +1,44 @@
+{
+  "tools": [
+    {
+      "id": "tool-electron-microscope",
+      "toolType": "ElectronMicroscope",
+      "accuracy": 0.98,
+      "maxZoom": 10,
+      "description": "High-magnification electron array resolves silicide stringers and plug cross-sections. The final word on back-end metallization faults.",
+      "measurementUnit": "nm"
+    },
+    {
+      "id": "tool-four-point-probe",
+      "toolType": "FourPointProbe",
+      "accuracy": 0.9,
+      "maxZoom": 1,
+      "description": "Four-point sheet-resistance mapping. Spikes reveal organic or metallic contamination films that shift threshold voltage.",
+      "measurementUnit": "ohm/sq"
+    },
+    {
+      "id": "tool-spectroscopic-ellipsometry",
+      "toolType": "SpectroscopicEllipsometry",
+      "accuracy": 0.9,
+      "maxZoom": 3,
+      "description": "Polarized-light reflectometry measures thin-film optical density. Exposes sub-surface STI fill failures invisible to surface scans.",
+      "measurementUnit": "delta/psi (deg)"
+    },
+    {
+      "id": "tool-stylus-profilometer",
+      "toolType": "StylusProfilometer",
+      "accuracy": 0.95,
+      "maxZoom": 4,
+      "description": "Diamond-tipped stylus maps surface topography line by line. Reveals bow, warp, and flatness deviations against high-NA depth-of-focus limits.",
+      "measurementUnit": "nm"
+    },
+    {
+      "id": "tool-xray-refractometry",
+      "toolType": "XRayRefractometry",
+      "accuracy": 0.9,
+      "maxZoom": 3,
+      "description": "Grazing-incidence X-ray tracks sub-surface layer roughness and density fluctuation. Catches interface traps that steal channel mobility.",
+      "measurementUnit": "nm RMS"
+    }
+  ]
+}
