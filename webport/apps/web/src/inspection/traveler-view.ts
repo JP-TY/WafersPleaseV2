@@ -47,7 +47,11 @@ export class TravelerView {
 
   constructor(scene: Scene) {
     this.panel = new Panel('traveler-panel', { width: W, height: H, scale: 1.4 });
-    this.mount = mountClipboard(scene, 'traveler', this.panel, 0.34, 0.44);
+    // Laid flat on the bench (1.15 rad from vertical, ~24 degrees off horizontal).
+    // A technician reads a traveler lying on the bench; standing it up on an easel
+    // put 0.44 m of paper in front of the instrument rack and covered the
+    // Stylus Profilometer screen, which is the first tool Day 1 asks you to run.
+    this.mount = mountClipboard(scene, 'traveler', this.panel, 0.34, 0.44, 1.15);
     this.mount.root.position = LAYOUT.traveler.clone();
     this.mount.root.rotation.y = TRAVELER_YAW;
     this.panel.invalidate();

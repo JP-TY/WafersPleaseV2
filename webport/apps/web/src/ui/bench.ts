@@ -47,7 +47,28 @@ const BENCH_DEPTH = 0.02;
  * emissive "printed form" cannot do any of those, which is why it reads as a
  * screen no matter how much paper texture is painted onto it.
  */
-export function mountClipboard(scene: Scene, name: string, panel: Panel, w: number, h: number): BenchMount {
+/**
+ * `tilt` is the sheet's angle from VERTICAL, in radians.
+ *
+ * The default (0.34, about 19 degrees off vertical) stands the sheet up on an easel
+ * at eye level. That is fine in isolation and wrong at this workstation: standing
+ * 0.44 m tall at the instrument rack, it reached y = 1.85 m, straight through the
+ * band the instrument screens occupy (1.58-1.89 m), and physically covered the
+ * leftmost screen -- the Stylus Profilometer, which is the first tool Day 1
+ * requires. The paper you have to read was in the way of the buttons you have to
+ * press.
+ *
+ * Passing a larger tilt lays it down on the bench, which is what a technician
+ * actually does with a traveler and which keeps the rack clear.
+ */
+export function mountClipboard(
+  scene: Scene,
+  name: string,
+  panel: Panel,
+  w: number,
+  h: number,
+  tiltAngle = 0.34,
+): BenchMount {
   const root = new TransformNode(`${name}-root`, scene);
 
   // Tilt lives on an intermediate node so the sheet AND its backing share it.
@@ -56,10 +77,10 @@ export function mountClipboard(scene: Scene, name: string, panel: Panel, w: numb
   // Raise the pivot by half the sheet height so the BOTTOM EDGE clears the bench
   // top. Centring the sheet on the bench surface drove its lower half through the
   // bench, and the part that poked out read as a stray wedge of paper.
-  tilt.position = new Vector3(0, BENCH_Y + (h / 2) * Math.cos(0.34) + 0.012, 0.012);
+  tilt.position = new Vector3(0, BENCH_Y + (h / 2) * Math.cos(tiltAngle) + 0.012, 0.012);
   // Positive: the top edge tips TOWARD the operator, so the sheet faces up and
   // out of the bench. Negative pointed the normal down and away from the player.
-  tilt.rotation.x = 0.34;
+  tilt.rotation.x = tiltAngle;
 
   const sheet = CreatePlane(`${name}-sheet`, { width: w, height: h }, scene);
   sheet.parent = tilt;
@@ -84,13 +105,16 @@ export function mountClipboard(scene: Scene, name: string, panel: Panel, w: numb
   clipLever.position = new Vector3(0, h / 2 - 0.022, -0.011);
   clipLever.material = steel(scene, `${name}-clip-lever-mat`, '#c2ccd8');
 
-  // Easel legs, upright and NOT tilted, so the sheet is actually held up.
-  for (const sx of [-1, 1]) {
-    const leg = CreateBox(`${name}-leg-${sx}`, { width: 0.016, height: 0.13, depth: 0.016 }, scene);
-    leg.parent = root;
-    leg.position = new Vector3(sx * (w / 2 - 0.035), BENCH_Y - 0.05, 0.07);
-    leg.rotation.x = 0.34;
-    leg.material = steel(scene, `${name}-leg-mat-${sx}`, '#6d757f');
+  // Easel legs, upright and NOT tilted, so the sheet is actually held up. Omitted
+  // for a clipboard lying flat, where legs would stand up through the sheet.
+  if (tiltAngle < 0.6) {
+    for (const sx of [-1, 1]) {
+      const leg = CreateBox(`${name}-leg-${sx}`, { width: 0.016, height: 0.13, depth: 0.016 }, scene);
+      leg.parent = root;
+      leg.position = new Vector3(sx * (w / 2 - 0.035), BENCH_Y - 0.05, 0.07);
+      leg.rotation.x = tiltAngle;
+      leg.material = steel(scene, `${name}-leg-mat-${sx}`, '#6d757f');
+    }
   }
 
   return {

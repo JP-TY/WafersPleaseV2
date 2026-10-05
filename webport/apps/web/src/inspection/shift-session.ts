@@ -225,6 +225,15 @@ export class ShiftSession {
     this.stage = new WaferStage(scene);
     this.traveler = new TravelerView(scene);
     this.cluster = new ClusterView(scene);
+    // Wire the instrument rack to the tool logic.
+    //
+    // `onRun` was never assigned, so it stayed the default no-op: clicking a screen
+    // or its physical RUN key did nothing at all. Every instrument in the rack was
+    // a dead prop and the only way to run one was the DOM chip row, which made the
+    // whole diegetic workstation -- the thing GDD 13 is about -- non-functional.
+    this.cluster.onRun = (tool) => {
+      this.runTool(tool);
+    };
     this.stamps = new StampBank(scene);
     this.briefing = new BriefingView(scene);
     this.debrief = new DebriefView(scene);
@@ -571,6 +580,21 @@ export class ShiftSession {
    * GDD §9 progression, not a convenience filter, so an off-roster instrument is
    * unavailable rather than merely discouraged.
    */
+  /**
+   * Settle an instrument's response.
+   *
+   * Called from the frame update so the RUN key travels back up and its lamp goes
+   * out once the instrument has answered.
+   */
+  private tickInstrumentResponse(dt: number): void {
+    if (this.runningSeconds <= 0) return;
+    this.runningSeconds -= dt;
+    if (this.runningSeconds > 0) return;
+    this.runningSeconds = 0;
+    this.cluster.setRunning(null);
+    this.cluster.releaseRunKeys();
+  }
+
   runTool(tool: ToolType): boolean {
     if (this.phase !== 'Inspection') return false;
     if (this.reworkBench) return false;
@@ -594,9 +618,32 @@ export class ShiftSession {
     // that is the Day 1 affordance. It must never name a defect the player has
     // not measured.
     this.emitCallout(reading.tool);
+    // Light the instrument that answered and hold its key down for a moment, so
+    // the rack visibly responds. `setRunning` and `releaseRunKeys` were both
+    // uncalled as well, so the RUN lamp never lit and the key never travelled.
+    this.runningSeconds = ShiftSession.TOOL_RESPONSE_SECONDS;
+    this.cluster.setRunning(reading.tool);
     this.onStateChange();
     return true;
   }
+
+  /**
+   * How long an instrument's RUN key stays down after it answers.
+   *
+   * Purely presentational feedback. The measurement itself is already resolved by
+   * the time this starts counting, so waiting it out costs the player nothing and
+   * the GDD 11 latency cost is unaffected.
+   */
+  private static readonly TOOL_RESPONSE_SECONDS = 0.55;
+
+  /**
+   * Seconds left on the current instrument's response animation.
+   *
+   * Zero means nothing is responding. The tool itself is not tracked here: the
+   * cluster keeps its own `active` set, and duplicating it here would be a second
+   * place for the two to disagree.
+   */
+  private runningSeconds = 0;
 
   private onKey(e: KeyboardEvent): void {
     if (e.repeat) return;
@@ -882,6 +929,7 @@ export class ShiftSession {
 
   update(dt: number): void {
     this.elapsedSeconds += dt;
+    this.tickInstrumentResponse(dt);
     this.quiz.update();
     this.progression.update();
     this.glossary.setVisible(this.glossary.isOpen && this.phase !== 'Briefing');
