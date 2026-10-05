@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Wafers Please \u2014 Babylon.js 9 / WebXR presentation layer",
+  "description": "Wafers Please — Babylon.js 9 / WebXR presentation layer",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -15,8 +15,8 @@
     "@babylonjs/core": "^9.29.0",
     "@babylonjs/gui": "^9.29.0",
     "@babylonjs/loaders": "^9.29.0",
-    "@wafers/sim": "workspace:*",
-    "@wafers/data": "workspace:*"
+    "@wafers/data": "workspace:*",
+    "@wafers/sim": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

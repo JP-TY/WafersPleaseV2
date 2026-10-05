@@ -179,12 +179,22 @@ export class ShiftSession {
     this.setStationVisible(!active);
     this.stamps.setEnabled(!active && !this.reworkBench);
     this.viewOwner = active ? 'bench' : 'station';
+    this.onBenchViewChange(active);
   }
 
   /** True when a rework bench, rather than the inspection station, is on screen. */
   get benchOwnsView(): boolean {
     return this.viewOwner === 'bench';
   }
+
+  /**
+   * Notified when a bench takes or releases the screen.
+   *
+   * Used by the presentation layer to move the operator body out of the way. Kept
+   * as a callback rather than a direct reference so the session still has no idea
+   * that a body exists.
+   */
+  onBenchViewChange: (active: boolean) => void = () => {};
 
   /** Whether the wafer stage is currently on screen. Exposed for tests. */
   get stageVisible(): boolean {
@@ -728,6 +738,7 @@ export class ShiftSession {
     this.setStationVisible(false);
     this.viewOwner = 'bench';
     this.onStateChange();
+    this.onBenchViewChange(true);
     if (bench.frameCamera && this.camera) bench.frameCamera(this.camera);
   }
 
@@ -745,6 +756,7 @@ export class ShiftSession {
     this.stamps.setEnabled(true);
     this.setStationVisible(true);
     this.viewOwner = 'station';
+    this.onBenchViewChange(false);
     // Hand the camera back to the station's working view.
     this.onStationRestore?.();
 

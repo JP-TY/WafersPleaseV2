@@ -43,8 +43,11 @@ import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
 import { SpotLight } from '@babylonjs/core/Lights/spotLight.js';
 
 import { C, MONO, Panel, hline, label, plate, trace, value, type PanelCtx } from '../ui/panel.js';
-import { mountBench, type BenchMount, BENCH_Y } from '../ui/bench.js';
+import { mountBench, placeInstrument, type BenchMount, BENCH_Y } from '../ui/bench.js';
 import { frameStation, housing, nameplate, pushButton, screws, telltales } from '../scene/physical.js';
+import { PhysicsWorld } from '../physics/rigid.js';
+import { Carriage, LiquidVolume } from '../physics/fluids.js';
+import { authoritative } from '../physics/boundary.js';
 import { steel } from '../scene/lighting.js';
 import { WAFER_RADIUS } from '../inspection/wafer-stage.js';
 import {
@@ -207,6 +210,11 @@ export class SilicideBench3D {
   private readonly dial: SweepDial;
   private readonly washLamp: (on: boolean) => void;
   private readonly probe: TransformNode;
+
+  /** Physical feel. Never consulted for a verdict (GDD 16). */
+  private readonly physics = new PhysicsWorld();
+  private readonly probeCarriage: Carriage;
+  private readonly bath: LiquidVolume;
   private readonly contactGaugeMat: StandardMaterial;
   private readonly run: { mesh: import('@babylonjs/core/Meshes/abstractMesh.js').AbstractMesh; setPressed(p: boolean): void };
 
@@ -315,6 +323,9 @@ export class SilicideBench3D {
     // sitting over the wafer rather than a number on a screen.
     this.probe = new TransformNode('sil-probe', scene);
     this.probe.parent = this.root;
+    // The carriage slides this group; the children keep their authored positions
+    // relative to the bath, so the physics cannot drift the probe off the wafer.
+    this.probe.position.x = 0;
     const probeMat = steel(scene, 'sil-probe-mat', '#d0dae6');
     for (const dz of [-0.05, 0.05]) {
       const pin = CreateCylinder('sil-probe-pin', { diameter: 0.005, height: 0.07, tessellation: 8 }, scene);
@@ -391,6 +402,21 @@ export class SilicideBench3D {
     // --- instrument readout --------------------------------------------------
     this.panel = new Panel('sil-readout', { width: W, height: H, scale: 1.5 });
     this.readout = mountBench(scene, 'sil-readout', this.panel);
+    // Re-seat the screen at the back of the bench and tilt it toward the operator.
+    // Left in `mountBench`'s default it sits inside the deck box (see placeInstrument).
+    this.readout.root.position = new Vector3(0, BENCH_Y, 0);
+    placeInstrument(this.readout, { y: 0.3, z: 0.4, tilt: 0.44 });
+
+    // Tag the simulation as graded: physics may not read it (GDD 16).
+    authoritative(this.sim);
+
+    // --- physical feel -------------------------------------------------------
+    // The probe carriage rides a spring along its rail instead of snapping to a
+    // position, so a sweep has weight and overshoots slightly at the end. The bath
+    // is a physical volume so the holder entering it displaces liquid.
+    this.probeCarriage = new Carriage(this.physics, { start: 0, travel: 0.24 });
+    this.probeCarriage.reset();
+    this.bath = new LiquidVolume(this.physics, { depth: 0.16, area: 0.125, width: 0.4 });
     this.readout.root.position = new Vector3(0, 0, -0.4);
 
     this.bindInput(scene);
@@ -434,6 +460,13 @@ export class SilicideBench3D {
 
   update(dt: number): void {
     const s = this.sim.state;
+
+    // Fixed-timestep integration so the motion is identical at any frame rate.
+    this.probeCarriage.moveTo(s.washing && !s.finished ? 0.24 : 0);
+    this.physics.update(dt);
+    this.probeCarriage.sync();
+    this.probe.position.x = this.probeCarriage.value;
+    this.bath.relax(dt);
 
     // Bath agitation: the surface lifts and the transducer glows while running.
     const running = s.washing && !s.finished;

@@ -29,10 +29,12 @@ import matrixData from '@wafers/data/config/rule-matrices.json';
 import scoringData from '@wafers/data/config/scoring.json';
 import toolsData from '@wafers/data/config/tools.json';
 import { createStage, frameWorkspace } from './scene.js';
+import { Operator } from './player/operator.js';
+import { KeyboardState, resolveMove } from './player/input.js';
 import { installEnvironment, installLighting, installPipeline } from './scene/lighting.js';
 import { buildBay } from './inspection/bay.js';
-import { RcaBench } from './rework/rca-view.js';
-import { SilicideBench } from './rework/silicide-view.js';
+import { RcaBench3D } from './rework/rca-bench-3d.js';
+import { SilicideBench3D } from './rework/silicide-bench-3d.js';
 import { CmpBench } from './rework/cmp-view.js';
 import { ShiftSession, type ReworkBenchHandle } from './inspection/shift-session.js';
 
@@ -51,6 +53,12 @@ const MATRICES = (matrixData as { ruleMatrices: RuleMatrix[] }).ruleMatrices;
 
 const canvas = document.getElementById('stage') as HTMLCanvasElement;
 const { engine, scene, camera } = createStage(canvas);
+
+// The operator: a body at the bench. The camera is deliberately left alone --
+// GDD 4 wants drag-to-orbit for inspecting a wafer under cross-lighting, and a
+// first-person camera would make that worse, not better.
+const operator = new Operator(scene);
+const keys = new KeyboardState();
 // Order matters: the environment first, because PBR materials compile against
 // the scene's IBL, and lighting before the pipeline so tone mapping is tuned to
 // the final light levels. The bay is built last because it registers the bench
@@ -71,8 +79,8 @@ const shiftRng = new Rng(run.seed);
 // chemistry bench at any time; the GDD §8 reworks are only reachable by
 // stamping a wafer that actually needs one.
 const benches: Record<string, ReworkBenchHandle> = {
-  rca: new RcaBench(scene, createRcaClean(shiftRng.fork(1), difficulty)),
-  silicide: new SilicideBench(
+  rca: new RcaBench3D(scene, createRcaClean(shiftRng.fork(1), difficulty)),
+  silicide: new SilicideBench3D(
     scene,
     createSilicideEtch(rollSilicideRecipe(shiftRng.fork(2), difficulty)),
   ),
@@ -251,6 +259,16 @@ session.onStateChange = () => {
   if (!session.benchOwnsView) frameWorkspace(camera, { phase: session.currentPhase, quizOpen: session.quizOpen });
   syncHud();
 };
+
+// The operator stands at the bench while inspecting, and steps aside when a rework
+// opens: the camera drops close to a bath, and a body filling that frame is in the
+// way of the thing the player is meant to be looking at.
+const onBenchViewChange = (active: boolean): void => {
+  operator.setVisible(!active);
+  if (active) operator.placeAt(0.98, -0.8, -0.35);
+  else operator.placeAt(-0.62, -0.8, 0.16);
+};
+session.onBenchViewChange = onBenchViewChange;
 session.onProgressionChange = () => {
   session.progression.setCampaign(session.campaign, true);
 };
@@ -263,6 +281,7 @@ session.onStateChange();
   lighting,
   session,
   scene,
+  operator,
   get phase() {
     return session.currentPhase;
   },
@@ -292,6 +311,16 @@ scene.onBeforeRenderObservable.add(() => {
   while (acc >= STEP && guard < 12) {
     session.update(STEP);
     for (const b of Object.values(benches)) b.update(STEP);
+
+    // Movement runs inside the same fixed step as everything else, so the walk
+    // speed does not depend on frame rate. Suppressed while a bench owns the
+    // view: the player is working at a bath, not crossing the room, and a body
+    // drifting across the instrument they are trying to read is a distraction.
+    if (!session.benchOwnsView) {
+      const dir = resolveMove(keys, camera);
+      if (dir) operator.move(dir, STEP);
+      else operator.stand();
+    }
     acc -= STEP;
     guard++;
   }

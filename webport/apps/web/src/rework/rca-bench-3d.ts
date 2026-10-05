@@ -38,6 +38,9 @@ import { housing, Knob, nameplate, screws, telltales } from '../scene/physical.j
 import { steel, matte } from '../scene/lighting.js';
 import { WAFER_RADIUS } from '../inspection/wafer-stage.js';
 import { frameStation } from '../scene/physical.js';
+import { PhysicsWorld, SpringProfile } from '../physics/rigid.js';
+import { LiquidVolume, Carriage, HingedInstrument } from '../physics/fluids.js';
+import { authoritative } from '../physics/boundary.js';
 import {
   rcaRemovalFraction,
   realMinutes,
@@ -170,11 +173,27 @@ class Bath {
     this.lamp = (on: boolean) => telltale.set(0, on);
   }
 
-  /** Level in [0,1], temperature in C, and whether the element is powered. */
-  update(level: number, temperatureC: number, targetC: number, heating: boolean, inSpec: boolean): void {
-    const h = Math.max(0.004, level * (TANK_H - 0.014));
+  /**
+   * Set the visible liquid height directly, in metres.
+   *
+   * Used by the physical liquid model, which owns the level so it can rise when
+   * the wafer displaces it and slosh when the fork enters fast. Presentation only.
+   */
+  setLiquidHeight(metres: number): void {
+    const h = Math.max(0.004, Math.min(TANK_H - 0.006, metres));
     this.liquid.scaling.y = h;
     this.liquid.position.y = 0.007 + h / 2;
+  }
+
+  /** Tilt the liquid surface, so a sloshing bath visibly leans. */
+  setLiquidTilt(x: number, z: number): void {
+    this.surface.rotation.x = x;
+    this.surface.rotation.z = z;
+  }
+
+  /** Level in [0,1], temperature in C, and whether the element is powered. */
+  update(level: number, temperatureC: number, targetC: number, heating: boolean, inSpec: boolean): void {
+    this.setLiquidHeight(level * (TANK_H - 0.014));
 
     // The element glows when it is actually drawing power, and brighter the
     // further the bath is from setpoint — so the player can see the heater work.
@@ -200,6 +219,29 @@ export class RcaBench3D {
   private readonly panel: Panel;
   private readonly sim: ReworkMinigame<RcaCleanState, RcaAction>;
   private readonly readout: BenchMount;
+
+  /**
+   * Physical feel. None of this reaches the verdict.
+   *
+   * The fork used to slide between baths with an exponential lerp, which is why
+   * moving it felt weightless: a lerp has no inertia by construction. It now
+   * rides a spring-damper along a rail, so it accelerates, overshoots a little
+   * and settles, and the baths it enters displace liquid and slosh.
+   *
+   * The simulation remains the only source of truth. `this.sim.state.immersed`
+   * decides whether the wafer is in the bath; the carriage is told where to go.
+   * The carriage is never asked what happened.
+   */
+  private readonly physics = new PhysicsWorld();
+  private readonly forkCarriage: Carriage;
+  private readonly sc1Liquid: LiquidVolume;
+  private readonly sc2Liquid: LiquidVolume;
+  private readonly qdrLiquid: LiquidVolume;
+  private readonly hoodLamp: HingedInstrument;
+  private wasImmersed = false;
+
+  /** The hood lamp head, hung from a hinge so it can swing. */
+  private lampSwing: TransformNode | null = null;
   private readonly root: TransformNode;
 
   private readonly sc1: Bath;
@@ -279,11 +321,29 @@ export class RcaBench3D {
     waferMat.roughness = 0.3;
     this.forkWafer.material = waferMat;
 
+    // --- physical feel -------------------------------------------------------
+    // Travel matches the bath spacing (SC-1 at -460 mm, SC-2 at +460 mm), so the
+    // carriage rails line up with the tanks it has to reach.
+    this.forkCarriage = this.physics.addSpring === undefined ? undefined! : new Carriage(this.physics, { start: 0, travel: 0.46 });
+    this.forkCarriage.reset();
+    // Plan area from the tank diameter, so a wafer displaces a plausible volume
+    // and the level rises by a believable amount rather than an arbitrary one.
+    const area = Math.PI * TANK_R * TANK_R;
+    this.sc1Liquid = new LiquidVolume(this.physics, { depth: TANK_H * 0.62, area, width: TANK_R * 2 });
+    this.sc2Liquid = new LiquidVolume(this.physics, { depth: TANK_H * 0.62, area, width: TANK_R * 2 });
+    this.qdrLiquid = new LiquidVolume(this.physics, { depth: TANK_H * 0.8, area, width: TANK_R * 2 });
+    this.hoodLamp = new HingedInstrument(this.physics, { rest: 0, limit: 0.22, profile: SpringProfile.UNDER });
+
     // --- instrument readout ------------------------------------------------
     // The trace and the limits stay on a screen, because that is what a fab bench
     // has, and because a graph drawn in 3D would be unreadable at this scale.
     this.panel = new Panel('rca-readout', { width: W, height: H, scale: 1.5 });
     this.readout = mountBench(scene, 'rca-readout', this.panel);
+
+    // Tag the simulation as graded. `assertReadOnly` will now refuse to hand this
+    // object to anything in the physics layer, so a future refactor cannot quietly
+    // let a carriage position influence a verdict (GDD 16).
+    authoritative(this.sim);
     // On a stalk behind and above the tanks, so the operator looks at the bath
     // and then up at the trace. `mountBench` already builds the screen at bench
     // height, so only the depth offset belongs here.
@@ -316,6 +376,24 @@ export class RcaBench3D {
     // Parented, or the light sits at floor level 1.4 m under the bench and the
     // whole station renders dark no matter how high the intensity goes.
     lamp.parent = this.root;
+
+    // The lamp head hangs off a short raked arm. It gets a hinge so the carriage
+    // passing underneath can set it swinging -- small, but it is the cue that sells
+    // the bench as an object in a room rather than a set of props on a table.
+    const swing = new TransformNode('rca-lamp-swing', scene);
+    swing.parent = this.root;
+    swing.position = new Vector3(0, 0.55, -0.26);
+    const lampArm = CreateCylinder('rca-lamp-arm', { diameter: 0.012, height: 0.12, tessellation: 8 }, scene);
+    lampArm.parent = swing;
+    lampArm.material = steel(scene, 'rca-lamp-arm-mat', '#6d7683');
+    const head = CreateCylinder('rca-lamp-head', {
+      diameterTop: 0.07, diameterBottom: 0.03, height: 0.05, tessellation: 16,
+    }, scene);
+    head.parent = swing;
+    head.position = new Vector3(0, -0.07, 0.01);
+    head.rotation.x = 0.5;
+    head.material = steel(scene, 'rca-lamp-head-mat', '#7c8592');
+    this.lampSwing = swing;
 
     // Soft fill from the operator's side. A deep quartz bath is a pit: every light
     // above it lights the far inner wall and leaves the near wall black, which is
@@ -399,14 +477,58 @@ export class RcaBench3D {
     this.qdr.update(s.active === 'qdr' ? 0.85 : 0.8, 22, 22, s.active === 'qdr' && s.immersed, true);
 
     // Move the fork to whichever bath the current step uses.
+    //
+    // The SIMULATION decides where the fork goes; the carriage only makes the
+    // journey look like it has mass. Note the direction of that dependency: state
+    // in, motion out. Nothing reads the carriage back.
     const target = s.step.kind === 'SC1' ? -0.46 : s.step.kind === 'SC2' ? 0.46 : 0;
     const lift = s.immersed ? 0.1 : TANK_H + 0.12;
-    this.fork.position.x += (target - this.fork.position.x) * Math.min(1, dt * 6);
+    this.forkCarriage.moveTo(target);
+
+    // Fixed-timestep integration, so the motion is identical at 60, 120 or 144 Hz.
+    // A frame-rate-coupled lerp here is exactly what would make two machines feel
+    // different -- and would make the same gesture produce different motion, even
+    // though it would never change the score.
+    const agitating = s.active === 'qdr' && s.immersed;
+    const forkSpeedBefore = this.forkCarriage.velocity;
+    this.physics.update(dt);
+    this.forkCarriage.sync();
+
+    this.fork.position.x = this.forkCarriage.value;
     this.fork.position.y += (lift - this.fork.position.y) * Math.min(1, dt * 6);
 
-    // Megasonic agitation ripples while the rinse is actually running.
-    const agitating = s.active === 'qdr' && s.immersed;
-    this.rippleMat.alpha = agitating ? 0.3 + Math.sin(this.sim.state.dwellSeconds * 30) * 0.2 : 0.0;
+    // Entering or leaving a bath displaces liquid. The volume is the wafer's
+    // submerged slice, and the entry speed is how fast the carriage was moving,
+    // so a hurried dunk sloshes and a careful one settles.
+    if (s.immersed !== this.wasImmersed) {
+      const bath = s.step.kind === 'SC1' ? this.sc1Liquid : s.step.kind === 'SC2' ? this.sc2Liquid : this.qdrLiquid;
+      const waferVolume = Math.PI * 0.15 * 0.15 * 0.0025;
+      if (s.immersed) bath.submerge(waferVolume, Math.abs(forkSpeedBefore) * 24 + Math.abs(this.forkCarriage.velocity) * 24);
+      else bath.emerge(waferVolume);
+      // The hood lamp swings when the carriage sloshes past it.
+      this.hoodLamp.bump(-Math.abs(this.forkCarriage.velocity) * 0.05);
+      this.wasImmersed = s.immersed;
+    }
+    for (const bath of [this.sc1Liquid, this.sc2Liquid, this.qdrLiquid]) bath.relax(dt);
+
+    // Push the physical liquid onto the meshes. One-way: sim -> physics -> pixels.
+    const active = s.step.kind === 'SC1' ? this.sc1Liquid : s.step.kind === 'SC2' ? this.sc2Liquid : this.qdrLiquid;
+    const pairs: Array<[Bath, LiquidVolume]> = [
+      [this.sc1, this.sc1Liquid],
+      [this.sc2, this.sc2Liquid],
+      [this.qdr, this.qdrLiquid],
+    ];
+    for (const [mesh, vol] of pairs) {
+      mesh.setLiquidHeight(vol.depth);
+      const t = vol.tilt;
+      mesh.setLiquidTilt(t.x, t.z);
+    }
+    // QDR ripples get stronger with the slosh, so a hurried rinse is visibly
+    // agitated and a gentle one is calm.
+    const slosh = active.sloshMagnitude;
+    this.rippleMat.alpha = agitating ? Math.min(0.55, 0.18 + slosh * 1.4) : 0;
+
+    if (this.lampSwing) this.lampSwing.rotation.z = this.hoodLamp.angle.value;
 
     const removal = this.removalFraction();
     this.history.push(removal);

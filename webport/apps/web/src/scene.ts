@@ -67,9 +67,15 @@ export function frameWorkspace(camera: ArcRotateCamera, opts: { phase?: string; 
   } else {
     // Working view: wafer stage centred, clipboard and stamps flanking, rack
     // above. Pitched down a little, from a seated eye height.
-    camera.setTarget(new Vector3(0, 1.44, 0.1));
-    camera.beta = 1.33;
-    camera.radius = 1.82;
+    //
+    // Pulled back from 1.82 to 2.3 m with the target dropped to 1.3. At 1.82 the
+    // operator's head sat below the bottom of the frame: a person standing at the
+    // bench is 1.6 m tall and the camera is pitched down at the instruments, so
+    // framing tightly on the instruments framed out the person using them. The
+    // instruments are large enough (a 1.15 m screen) to stay readable at 2.3 m.
+    camera.setTarget(new Vector3(0, 1.3, 0.1));
+    camera.beta = 1.36;
+    camera.radius = 2.3;
   }
   camera.lowerRadiusLimit = 0.8;
   camera.upperRadiusLimit = 4;
