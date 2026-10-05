@@ -354,6 +354,11 @@ export class WaferStage {
     this.tiltPivot.rotation.x += (this.pitch - this.tiltPivot.rotation.x) * Math.min(1, dt * 14);
   }
 
+  /** Whether the stage is currently shown. Exposed for session and tests. */
+  get isVisible(): boolean {
+    return this.root.isEnabled();
+  }
+
   setVisible(visible: boolean): void {
     this.active = visible;
     this.root.setEnabled(visible);

@@ -16,6 +16,8 @@
 import { describe, expect, it } from 'vitest';
 import { NullEngine } from '@babylonjs/core/Engines/nullEngine.js';
 import { Scene } from '@babylonjs/core/scene.js';
+import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera.js';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import '@babylonjs/core/Culling/ray.js';
 
 import { ShiftSession, type ReworkBenchHandle } from '../src/inspection/shift-session.js';
@@ -712,4 +714,138 @@ describe('GDD §9 three-day progression, through the session', () => {
     expect(session.boosts).toBe(banked);
     expect(session.campaign.boosts).toBe(banked);
   });
+});
+
+// ---------------------------------------------------------------------------
+// View ownership
+//
+// A rework bench has to be able to keep the camera. The bug this covers was
+// silent and total: `openReworkBench` framed the camera to the bench and then
+// immediately published a state change, and main.ts reframes the room on every
+// state change — so every bench framing was reverted one tick later and a bench
+// could never be seen up close, no matter what the bench itself looked like.
+// ---------------------------------------------------------------------------
+
+/** A bench that frames a camera and records the order of the calls it receives. */
+function framingBench(calls: string[]): ReworkBenchHandle {
+  return {
+    setVisible() {},
+    update() {},
+    frameCamera() {
+      calls.push('frameCamera');
+    },
+  };
+}
+
+describe('bench view ownership', () => {
+  it('claims the view before the state change, so framing is not undone', () => {
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const calls: string[] = [];
+    const benches = { rca: framingBench(calls), silicide: framingBench(calls), cmp: framingBench(calls) };
+    const session = new ShiftSession(
+      scene,
+      { days: DAYS, rules: RULES, defects: DEFECTS, tools: TOOLS, scoring: SCORING, seed: 99 },
+      benches,
+    );
+    session.setReworkBenches(benches);
+
+    // Stand in for main.ts: a state change reframes the room, but only while the
+    // station owns the camera. This is the rule that was missing.
+    let roomFramed = 0;
+    session.onStateChange = () => {
+      if (!session.benchOwnsView) roomFramed++;
+    };
+
+    session.enterBenchView(true);
+    expect(session.benchOwnsView).toBe(true);
+
+    const before = roomFramed;
+    for (let i = 0; i < 5; i++) session.onStateChange();
+    // Phase changes during a rework must not reframe the room.
+    expect(roomFramed).toBe(before);
+
+    session.enterBenchView(false);
+    expect(session.benchOwnsView).toBe(false);
+    session.onStateChange();
+    expect(roomFramed).toBe(before + 1);
+
+    engine.dispose();
+  });
+
+  /** A Day 1 seed that actually contains a wafer whose correct action is Rework. */
+  function seedWithReworkableWafer(maxTries = 400): number {
+    for (let seed = 1; seed <= maxTries; seed++) {
+      const lot = generateLot({ day: DAY1, defects: DEFECTS, seed: seedForDay(seed, 1) });
+      const rules = RULES.find((r) => r.id === 'rule-matrix-day-1')!;
+      const hasRework = lot.wafers.some((w) => {
+        const eff = projectWafer(w, INITIAL_STATION_STATE);
+        return correctActionFor(eff, rules) === 'Rework';
+      });
+      if (hasRework) return seed;
+    }
+    throw new Error('no Day 1 lot with a reworkable wafer found');
+  }
+
+  it('keeps the station down and the camera on the bench for a real rework', () => {
+    // Drive the real path: a Rework stamp on a substrate-contamination wafer.
+    const reworkSeed = seedWithReworkableWafer();
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    const order: string[] = [];
+    const recorder = (name: string): ReworkBenchHandle => ({
+      setVisible(v: boolean) {
+        if (v) order.push(`${name}:show`);
+      },
+      update() {},
+      frameCamera() {
+        order.push(`${name}:frame`);
+      },
+    });
+    const benches = { rca: recorder('rca'), silicide: recorder('silicide'), cmp: recorder('cmp') };
+    const camera = new ArcRotateCamera('cam', -Math.PI / 2, 1.16, 1.8, new Vector3(0, 0, 0), scene);
+    const session = new ShiftSession(
+      scene,
+      { days: DAYS, rules: RULES, defects: DEFECTS, tools: TOOLS, scoring: SCORING, seed: reworkSeed },
+      benches,
+      camera,
+    );
+    session.setReworkBenches(benches);
+
+    // Stand in for main.ts's rule: reframe the room on a state change, but only
+    // while the station owns the camera.
+    let roomFramed = 0;
+    session.onStateChange = () => {
+      order.push(session.benchOwnsView ? 'state:bench' : 'state:room');
+      if (!session.benchOwnsView) roomFramed++;
+    };
+
+    let sawOpen = false;
+    playLot(session, () => 'Rework', (_p, _w, reworkOpen) => {
+      if (reworkOpen) {
+        sawOpen = true;
+        // GDD 8A: substrate contamination opens the twin-tank wet bench, and the
+        // bench must take the camera before the state change is published.
+        expect(benches.rca).toBeDefined();
+        expect(session.stageVisible).toBe(false);
+      }
+      return sawOpen;
+    });
+
+    expect(sawOpen).toBe(true);
+    // The bench framed the camera, and no room framing happened while it was open.
+    // GDD 8A: substrate contamination opens the twin-tank wet bench, and only it.
+    expect(order).toContain('rca:show');
+    expect(order).not.toContain('silicide:show');
+    expect(order).not.toContain('cmp:show');
+    // The bench framed the camera, and the state change published right after it
+    // did NOT reframe the room back.
+    expect(order).toContain('rca:frame');
+    const framedAt = order.indexOf('rca:frame');
+    expect(order.slice(framedAt).filter((o) => o === 'state:room')).toEqual([]);
+    expect(order.filter((o) => o === 'state:room' && order.indexOf(o) > order.indexOf('rca:frame')).length).toBe(0);
+
+    engine.dispose();
+  });
+
 });

@@ -12,6 +12,8 @@
  */
 
 import type { Scene } from '@babylonjs/core/scene.js';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { frameStation } from '../scene/physical.js';
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
 import {
   C,
@@ -29,7 +31,7 @@ import {
   type PanelCtx,
 } from '../ui/panel.js';
 import { wrap as wrapText } from './rca-view.js';
-import { mountBench, pickPanel, type BenchMount } from '../ui/bench.js';
+import { mountBench, pickPanel, BENCH_Y, type BenchMount } from '../ui/bench.js';
 import { PROCESS } from '@wafers/sim';
 import {
   CMP_GAIN_RANGE,
@@ -64,6 +66,23 @@ export class CmpBench {
 
   setVisible(visible: boolean): void {
     this.mount.setVisible(visible);
+  }
+
+  /**
+   * Take the camera when this bench opens.
+   *
+   * `openReworkBench` calls this if the bench provides it. Without it the bench
+   * appeared while the camera stayed on the room-wide view, so the player was
+   * left looking at a bench they had to find. The session's view ownership keeps
+   * the framing afterwards: state changes no longer tear the camera back.
+   */
+  frameCamera(camera: import('@babylonjs/core/Cameras/arcRotateCamera.js').ArcRotateCamera): void {
+    frameStation(camera, {
+      target: new Vector3(0, BENCH_Y, 0),
+      alpha: -Math.PI / 2,
+      beta: 1.16,
+      radius: 0.98,
+    });
   }
 
   /** Three horizontal knob tracks plus the lock button. */

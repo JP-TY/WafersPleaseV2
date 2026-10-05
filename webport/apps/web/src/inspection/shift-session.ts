@@ -186,6 +186,11 @@ export class ShiftSession {
     return this.viewOwner === 'bench';
   }
 
+  /** Whether the wafer stage is currently on screen. Exposed for tests. */
+  get stageVisible(): boolean {
+    return this.stage.isVisible;
+  }
+
   /** Hand the camera to a surface. main.ts uses this for `?station=` mounts. */
   setViewOwner(owner: 'station' | 'bench'): void {
     this.viewOwner = owner;
