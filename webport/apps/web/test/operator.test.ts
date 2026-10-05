@@ -21,6 +21,7 @@ import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 
 import { Operator, WALK_AREA, operatorMeshes } from '../src/player/operator.js';
 import { KeyboardState, resolveMove } from '../src/player/input.js';
+import { FollowCamera } from '../src/player/follow-camera.js';
 
 function stage() {
   const engine = new NullEngine();
@@ -265,6 +266,90 @@ describe('input', () => {
     keys.setForTest('KeyW', false);
     expect(resolveMove(keys, fakeCamera(-Math.PI / 2))).toBeNull();
     keys.dispose();
+    engine.dispose();
+  });
+});
+// ---------------------------------------------------------------------------
+// Follow camera
+// ---------------------------------------------------------------------------
+
+describe('follow camera', () => {
+  function camAt(scene: Scene): ArcRotateCamera {
+    return new ArcRotateCamera('cam', -Math.PI / 2, 1.36, 2.3, new Vector3(0, 1.3, 0.1), scene);
+  }
+
+  /** Settle the follow springs without animating. */
+  function settle(f: ReturnType<typeof FollowCamera.create>, cam: ArcRotateCamera, at: { x: number; z: number }, seconds = 2) {
+    const dt = 1 / 60;
+    for (let i = 0; i < seconds / dt; i++) f.follow(cam, at, dt);
+  }
+
+  it('tracks the operator', () => {
+    const { engine, scene } = stage();
+    const cam = camAt(scene);
+    const f = FollowCamera.create();
+    f.resume(cam);
+    settle(f, cam, { x: -0.6, z: -0.8 });
+    const atBench = f.target.x;
+    settle(f, cam, { x: 1.4, z: -0.8 });
+    expect(f.target.x).toBeGreaterThan(atBench + 0.5);
+    engine.dispose();
+  });
+
+  it('does not put the operator on the centre line -- that would block the bench', () => {
+    const { engine, scene } = stage();
+    const cam = camAt(scene);
+    const f = FollowCamera.create();
+    f.resume(cam);
+    settle(f, cam, { x: -0.62, z: -0.8 });
+    expect(Math.abs(f.target.x - -0.62)).toBeGreaterThan(0.15);
+    engine.dispose();
+  });
+
+  it('does nothing while suspended, so a rework bench keeps its framing', () => {
+    const { engine, scene } = stage();
+    const cam = camAt(scene);
+    const f = FollowCamera.create();
+    f.resume(cam);
+    f.suspend(cam);
+    const before = { ...f.target };
+    settle(f, cam, { x: 2, z: -1 });
+    expect(f.target.x).toBeCloseTo(before.x, 6);
+    expect(f.isSuspended).toBe(true);
+    engine.dispose();
+  });
+
+  it('resuming continues from the camera rather than sweeping across the room', () => {
+    // This is the stutter guard: a bench framed the camera at the far bath, and
+    // resuming with a stale spring would drag the view back through the bay.
+    const { engine, scene } = stage();
+    const cam = camAt(scene);
+    const f = FollowCamera.create();
+    f.resume(cam);
+    settle(f, cam, { x: 1.8, z: -1.2 });
+    f.suspend(cam);
+    cam.setTarget(new Vector3(3, 1.4, 0.4));
+    f.resume(cam);
+    expect(f.target.x).toBeCloseTo(3, 6);
+    engine.dispose();
+  });
+
+  it('frames the bench while standing at it, and releases the operator out in the room', () => {
+    // The bias exists so the workstation stays framed while the player works at it,
+    // and it must fade with distance or walking across the bay drags the bench
+    // along behind you.
+    const { engine, scene } = stage();
+    const cam = camAt(scene);
+    const f = FollowCamera.create();
+    f.resume(cam);
+
+    // At the bench the look-at point is pulled onto the instruments...
+    settle(f, cam, { x: -0.62, z: -0.8 });
+    expect(Math.abs(f.target.x)).toBeLessThan(0.3);
+
+    // ...and out at the far side of the bay it is released back onto the operator.
+    settle(f, cam, { x: 2.1, z: -1.2 });
+    expect(f.target.x).toBeGreaterThan(1.8);
     engine.dispose();
   });
 });

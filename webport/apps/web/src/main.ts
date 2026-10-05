@@ -28,9 +28,10 @@ import daysData from '@wafers/data/config/days.json';
 import matrixData from '@wafers/data/config/rule-matrices.json';
 import scoringData from '@wafers/data/config/scoring.json';
 import toolsData from '@wafers/data/config/tools.json';
-import { createStage, frameWorkspace } from './scene.js';
+import { createStage, frameWorkspace, isReadingPhase } from './scene.js';
 import { Operator } from './player/operator.js';
 import { KeyboardState, resolveMove } from './player/input.js';
+import { FollowCamera } from './player/follow-camera.js';
 import { installEnvironment, installLighting, installPipeline } from './scene/lighting.js';
 import { buildBay } from './inspection/bay.js';
 import { RcaBench3D } from './rework/rca-bench-3d.js';
@@ -59,6 +60,10 @@ const { engine, scene, camera } = createStage(canvas);
 // first-person camera would make that worse, not better.
 const operator = new Operator(scene);
 const keys = new KeyboardState();
+
+// The camera follows the technician. Explicit ownership: while a rework bench owns
+// the screen the follow camera stands down and the bench frames itself.
+const follow = FollowCamera.create();
 // Order matters: the environment first, because PBR materials compile against
 // the scene's IBL, and lighting before the pipeline so tone mapping is tuned to
 // the final light levels. The bay is built last because it registers the bench
@@ -256,7 +261,12 @@ function syncHud(): void {
 session.onStateChange = () => {
   // A rework bench owns the camera while it is open; reframing the room here
   // would tear the player away from the bench they are working on.
-  if (!session.benchOwnsView) frameWorkspace(camera, { phase: session.currentPhase, quizOpen: session.quizOpen });
+  if (!session.benchOwnsView) {
+    frameWorkspace(camera, { phase: session.currentPhase, quizOpen: session.quizOpen });
+    // frameWorkspace just moved the target; re-seed the follow camera from it so it
+    // continues rather than pulling the view back and stuttering.
+    follow.resync(camera);
+  }
   syncHud();
 };
 
@@ -265,8 +275,15 @@ session.onStateChange = () => {
 // way of the thing the player is meant to be looking at.
 const onBenchViewChange = (active: boolean): void => {
   operator.setVisible(!active);
-  if (active) operator.placeAt(0.98, -0.8, -0.35);
-  else operator.placeAt(-0.62, -0.8, 0.16);
+  if (active) {
+    operator.placeAt(0.98, -0.8, -0.35);
+    follow.suspend(camera);
+  } else {
+    operator.placeAt(-0.62, -0.8, 0.16);
+    // Hand control back only if we are not about to frame a reading board.
+    if (isReadingPhase(session.currentPhase, session.quizOpen)) follow.suspend(camera);
+    else follow.resume(camera);
+  }
 };
 session.onBenchViewChange = onBenchViewChange;
 session.onProgressionChange = () => {
@@ -320,6 +337,14 @@ scene.onBeforeRenderObservable.add(() => {
       const dir = resolveMove(keys, camera);
       if (dir) operator.move(dir, STEP);
       else operator.stand();
+      // The briefing board and the debrief have to stay readable, so the camera
+      // goes back to framing them rather than following the technician.
+      if (isReadingPhase(session.currentPhase, session.quizOpen)) {
+        if (!follow.isSuspended) follow.suspend(camera);
+      } else if (follow.isSuspended) {
+        follow.resume(camera);
+      }
+      follow.follow(camera, operator.position, STEP);
     }
     acc -= STEP;
     guard++;

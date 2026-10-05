@@ -44,6 +44,25 @@ export interface Stage {
  * camera sits back far enough to hold all of it, and looks slightly downward at
  * a seated eye height. Set from `main.ts` via `frameWorkspace`.
  */
+/**
+ * Whether this phase is a reading phase -- the camera looks at the back wall board
+ * rather than at the bench.
+ *
+ * Exported because the follow camera has to stand down for these. It owns the
+ * camera target while the player is at the workstation, and a paper-weighted
+ * briefing or a debrief board that the camera refuses to stay on is not readable
+ * at any distance.
+ */
+export function isReadingPhase(phase: string, quizOpen: boolean): boolean {
+  return (
+    phase === 'Progression' ||
+    phase === 'Briefing' ||
+    phase === 'Debrief' ||
+    phase === 'Complete' ||
+    (phase === 'EndOfDay' && quizOpen)
+  );
+}
+
 export function frameWorkspace(camera: ArcRotateCamera, opts: { phase?: string; quizOpen?: boolean } = {}): void {
   // alpha = -PI/2 puts the viewer on -Z looking toward +Z, matching LAYOUT in
   // inspection/bay.ts. beta is measured from +Y, so beta = PI/2 is horizontal.
@@ -51,12 +70,7 @@ export function frameWorkspace(camera: ArcRotateCamera, opts: { phase?: string; 
   // EndOfDay counts as "reading" while the §12 quiz is up, otherwise the review
   // board sits unreadably small on the back wall while the camera is still framed
   // on the bench.
-  const reading =
-    opts.phase === 'Progression' ||
-    opts.phase === 'Briefing' ||
-    opts.phase === 'Debrief' ||
-    opts.phase === 'Complete' ||
-    (opts.phase === 'EndOfDay' && opts.quizOpen === true);
+  const reading = isReadingPhase(opts.phase ?? '', opts.quizOpen === true);
   camera.alpha = -Math.PI / 2;
   if (reading) {
     // The paperwork phases look at the board on the back wall, from far enough
