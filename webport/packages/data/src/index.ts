@@ -151,15 +151,75 @@ export const RuleMatrix = z.object({
 });
 export type RuleMatrix = z.infer<typeof RuleMatrix>;
 
-/** ReworkConfigSO */
+/**
+ * One step of a rework recipe.
+ *
+ * The Unity `ReworkConfigSO` had only a flat `string[] stepDescriptions`, which
+ * meant the *procedure* lived nowhere: the player was told a step was called
+ * "SC-1" with no temperature, no chemistry, and no dwell. The actual physics
+ * lived hardcoded in the minigame code, so the data asset and the simulation
+ * could disagree with no way to detect it.
+ *
+ * These fields are the recipe, and `sim` reads them. `null` on the temperature
+ * window means the step is not temperature-controlled (a megasonic rinse runs at
+ * ambient), which is a real distinction the flat description list could not
+ * express.
+ */
+export const ReworkStepConfig = z.object({
+  /** Stable key the simulation matches on, e.g. `SC1`, `QDR1`, `WASH`. */
+  key: z.string().min(1),
+  /** Player-facing step name. */
+  label: z.string().min(1),
+  /** What the step is, or why it exists. */
+  purpose: z.string().default(''),
+  /** Bath chemistry / medium. */
+  chemistry: z.string().default(''),
+  /** What this step is responsible for removing. */
+  removes: z.string().default(''),
+  /** Temperature window, or null when the step runs at ambient. */
+  targetC: z
+    .object({ min: z.number(), nominal: z.number(), max: z.number() })
+    .nullable()
+    .default(null),
+  /** Dwell window in game seconds. */
+  dwellSeconds: z.object({ min: z.number().nonnegative(), nominal: z.number().nonnegative(), max: z.number().nonnegative() }),
+  /** The same dwell stated in real process minutes, for player-facing material. */
+  realDwellMinutes: z.object({ min: z.number().nonnegative(), nominal: z.number().nonnegative(), max: z.number().nonnegative() }),
+});
+export type ReworkStepConfig = z.infer<typeof ReworkStepConfig>;
+
+/**
+ * ReworkConfigSO.
+ *
+ * `instructionsText`, `idealTimingSeconds`, `toleranceWindowSeconds`,
+ * `failurePenalty` and `stepDescriptions` are the Unity fields and were all left
+ * unauthored on two of the three assets — `idealTimingSeconds` was 0 and
+ * `stepDescriptions` was empty for both RCA and the silicide etch, so the
+ * converter emitted placeholders and the minigames hardcoded their own values.
+ * `steps` now carries the recipe the simulation actually runs.
+ */
 export const ReworkConfig = z.object({
   id: ConfigId,
   type: z.enum(REWORK_TYPES),
   instructionsText: z.string().default(''),
+  /** Total nominal duration of the whole procedure, game seconds. */
   idealTimingSeconds: z.number().nonnegative().default(0),
+  /** How far off the nominal a player may be before it counts as a miss. */
   toleranceWindowSeconds: z.number().nonnegative().default(0),
+  /** Competency penalty applied when the rework is botched. */
   failurePenalty: z.number().nonnegative().default(0),
   stepDescriptions: z.array(z.string()).default([]),
+  steps: z.array(ReworkStepConfig).default([]),
+  /** The GDD §8 bench this rework is played at, for the HUD and the tablet. */
+  bench: z
+    .object({
+      /** GDD §8 letter. */
+      key: z.string().min(1),
+      title: z.string().min(1),
+      /** One-line description of the instrument being operated. */
+      instrument: z.string().default(''),
+    })
+    .default({ key: 'unknown', title: 'Unassigned', instrument: '' }),
 });
 export type ReworkConfig = z.infer<typeof ReworkConfig>;
 
@@ -248,10 +308,61 @@ export function validateBundle(bundle: ConfigBundle): ValidationIssue[] {
     }
   }
 
+  /**
+   * Rework authoring.
+   *
+   * Two of the three Unity assets shipped empty — `idealTimingSeconds` 0,
+   * `stepDescriptions` empty, and `rework-silicide-wet-etch` additionally typed
+   * `RCAClean`, so it routed to the wrong bench. All three now carry a full
+   * recipe in `steps`, and these checks exist so those gaps cannot silently
+   * return: an unauthored rework is not a cosmetic problem, it is a defect the
+   * player is asked to fix using instructions that were never written.
+   */
+  const reworkTypes = new Set(bundle.rework.map((r) => r.type));
+  for (const t of REWORK_TYPES) {
+    if (!reworkTypes.has(t)) err('rework', `no ReworkConfig for type "${t}"`);
+  }
   for (const r of bundle.rework) {
-    if (!r.instructionsText) warn(r.id, 'instructionsText is empty (unauthored in Unity)');
-    if (r.idealTimingSeconds === 0) warn(r.id, 'idealTimingSeconds is 0 (unauthored in Unity)');
-    if (r.stepDescriptions.length === 0) warn(r.id, 'stepDescriptions is empty (unauthored in Unity)');
+    if (!r.instructionsText) err(r.id, 'instructionsText is empty — the player has no procedure to follow');
+    if (r.idealTimingSeconds === 0) err(r.id, 'idealTimingSeconds is 0 — no nominal duration for the procedure');
+    if (r.toleranceWindowSeconds === 0) err(r.id, 'toleranceWindowSeconds is 0 — every run would count as a miss');
+    if (r.failurePenalty === 0) err(r.id, 'failurePenalty is 0 — botching this rework costs the player nothing');
+    if (r.stepDescriptions.length === 0) err(r.id, 'stepDescriptions is empty');
+    if (r.steps.length === 0) err(r.id, 'steps is empty — the simulation has no recipe to run');
+    if (r.bench.key === 'unknown') err(r.id, 'bench.key is "unknown" — rework has no GDD §8 bench assigned');
+
+    // Step keys must be unique: the simulation matches on them.
+    const keys = new Set<string>();
+    for (const s of r.steps) {
+      if (keys.has(s.key)) err(r.id, `duplicate step key "${s.key}"`);
+      keys.add(s.key);
+      if (s.dwellSeconds.nominal < s.dwellSeconds.min || s.dwellSeconds.nominal > s.dwellSeconds.max) {
+        err(r.id, `step "${s.key}" nominal dwell ${s.dwellSeconds.nominal} outside [${s.dwellSeconds.min}, ${s.dwellSeconds.max}]`);
+      }
+      if (s.targetC) {
+        if (s.targetC.nominal < s.targetC.min || s.targetC.nominal > s.targetC.max) {
+          err(r.id, `step "${s.key}" nominal temperature outside its window`);
+        }
+        if (s.targetC.min >= s.targetC.max) err(r.id, `step "${s.key}" temperature window is empty`);
+      }
+    }
+
+    // The declared step count and the flat description list must agree, or the
+    // UI would show a different number of steps than the simulation runs.
+    if (r.steps.length > 0 && r.stepDescriptions.length !== r.steps.length) {
+      err(r.id, `stepDescriptions has ${r.stepDescriptions.length} entries but steps has ${r.steps.length}`);
+    }
+
+    // Ideal timing should be the sum of the nominal dwells, within tolerance.
+    // This is what caught the zero-timings: the asset and the minigame were
+    // describing different procedures.
+    const dwellSum = r.steps.reduce((a, s) => a + s.dwellSeconds.nominal, 0);
+    if (r.steps.length > 0 && r.idealTimingSeconds > 0) {
+      const drift = Math.abs(dwellSum - r.idealTimingSeconds);
+      if (drift > Math.max(4, r.idealTimingSeconds * 0.3)) {
+        warn(r.id, `idealTimingSeconds ${r.idealTimingSeconds} vs nominal dwell sum ${dwellSum}s`);
+      }
+    }
   }
 
   if (bundle.scoring === null) {

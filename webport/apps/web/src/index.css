@@ -3,17 +3,67 @@
 html, body { margin: 0; height: 100%; background: #0b0e13; overflow: hidden;
   font-family: 'DejaVu Sans', system-ui, sans-serif; }
 #stage { width: 100vw; height: 100vh; display: block; touch-action: none; }
-#hud { position: fixed; left: 16px; bottom: 14px; z-index: 10; user-select: none; }
-#hud .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+
+/*
+ * Shift HUD.
+ *
+ * Deliberately minimal. GDD §13 forbids floating HUD elements and menu bars, so
+ * this reports only what a browser window has nowhere else to put: which phase
+ * the shift is in, the shift clock, the two gate numbers, and lot progress. Every
+ * physical reading — metrology values, spec limits, disposition rules — is drawn
+ * on an instrument or printed on the clipboard, because that is where a real
+ * operator reads it and where the GDD says it should be.
+ *
+ * It sits at the BOTTOM of the screen on purpose: the diegetic workspace owns the
+ * centre of the frame, so the chrome stays out of the way of the instruments.
+ */
+#hud {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  user-select: none; padding: 10px 16px 12px;
+  display: flex; flex-direction: column; gap: 7px; align-items: flex-start;
+  background: linear-gradient(to top, rgba(11,14,19,0.94), rgba(11,14,19,0));
+  pointer-events: none;
+}
+#hud > * { pointer-events: auto; }
+#hud .row { display: flex; gap: 6px; flex-wrap: wrap; }
+
 .tab {
   background: #151b23; color: #7d8b9c; border: 1px solid #2c3542;
-  border-radius: 6px; padding: 7px 13px; font: 600 12px/1 'DejaVu Sans Mono', monospace;
-  letter-spacing: .04em; cursor: pointer;
+  border-radius: 6px; padding: 6px 11px; font: 600 11px/1 'DejaVu Sans Mono', monospace;
+  letter-spacing: .04em; cursor: pointer; transition: color .12s, border-color .12s;
 }
-.tab:hover { color: #d7e2ee; border-color: #4a5a6e; }
-.tab.active { color: #0b0e13; background: #5ec8d8; border-color: #5ec8d8; }
-.hint { color: #7d8b9c; font: 500 12px/1.5 'DejaVu Sans Mono', monospace; }
-.meta { color: #4a5a6e; font: 500 10px/1.6 'DejaVu Sans Mono', monospace; }
+.tab:hover:not(.locked) { color: #d7e2ee; border-color: #4a5a6e; }
+/* Run already this wafer: the button stays clickable but reads as done, matching
+   the instrument screen showing a reading rather than an idle trace. */
+.tab.used { color: #5fd68a; border-color: #2f7d4f; }
+/* Off today's roster (GDD §9): visibly unavailable, not merely discouraged. */
+.tab.locked { opacity: .3; cursor: not-allowed; }
+
+#hud .row.dim { opacity: .35; pointer-events: none; }
+
+.stats { color: #a8b6c6; font: 600 12px/1.4 'DejaVu Sans Mono', monospace; letter-spacing: .03em; }
+.meta { color: #4a5a6e; font: 500 10px/1.5 'DejaVu Sans Mono', monospace; }
+
+/* GDD §12 context callout. Reads as a supervisor's note, which is what it is. */
+.callout {
+  max-width: 720px; color: #e8b552; font: 500 12px/1.5 'DejaVu Sans Mono', monospace;
+  border-left: 2px solid #e8b552; padding: 4px 0 4px 10px;
+  background: rgba(232,181,82,0.07);
+}
+
+.tag {
+  color: #0b0e13; background: #5ec8d8; border-radius: 4px;
+  padding: 4px 10px; font: 800 11px/1.4 'DejaVu Sans Mono', monospace; letter-spacing: .06em;
+}
+.tag.rework { background: #c08a1e; color: #14100a; }
+
+.primary {
+  margin-top: 2px; background: #5ec8d8; color: #0b0e13; border: 1px solid #5ec8d8;
+  border-radius: 6px; padding: 9px 18px; cursor: pointer;
+  font: 800 12px/1 'DejaVu Sans Mono', monospace; letter-spacing: .08em;
+}
+.primary:hover { background: #7ad8e6; border-color: #7ad8e6; }
+
 #title { position: fixed; left: 16px; top: 14px; z-index: 10; color: #d7e2ee;
   font: 700 13px/1 'DejaVu Sans Mono', monospace; letter-spacing: .08em; }
 #title small { display:block; color:#4a5a6e; font-weight:500; letter-spacing:.04em; margin-top:5px; }

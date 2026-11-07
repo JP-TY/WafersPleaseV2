@@ -64,7 +64,7 @@ export const PALETTE = {
   trace: '#7cf2b0',
   grid: '#243040',
   glass: '#0d1116',
-} as const;
+} as const satisfies Record<string, string>;
 
 export const MONO = "'DejaVu Sans Mono', 'Menlo', 'Consolas', monospace";
 export const SANS = "'DejaVu Sans', 'Helvetica Neue', Arial, sans-serif";
@@ -137,7 +137,7 @@ export function value(
   label(c, text, x, y, { size: 15, color: PALETTE.text, font: MONO, align: opts.align ?? 'right', weight: '600', ...opts });
 }
 
-export function hline(c: PanelCtx, y: number, color = PALETTE.panelEdge): void {
+export function hline(c: PanelCtx, y: number, color: string = PALETTE.panelEdge): void {
   c.ctx.strokeStyle = color;
   c.ctx.lineWidth = 1;
   c.ctx.beginPath();

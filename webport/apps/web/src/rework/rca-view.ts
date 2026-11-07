@@ -11,6 +11,8 @@
  */
 
 import type { Scene } from '@babylonjs/core/scene.js';
+import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { frameStation } from '../scene/physical.js';
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
 import {
   C,
@@ -26,7 +28,7 @@ import {
   value,
   type PanelCtx,
 } from '../ui/panel.js';
-import { mountBench, pickPanel, type BenchMount } from '../ui/bench.js';
+import { mountBench, pickPanel, BENCH_Y, type BenchMount } from '../ui/bench.js';
 import { PROCESS, arrheniusRatio, realMinutes } from '@wafers/sim';
 import {
   RCA_STEPS,
@@ -57,6 +59,23 @@ export class RcaBench {
 
   setVisible(visible: boolean): void {
     this.mount.setVisible(visible);
+  }
+
+  /**
+   * Take the camera when this bench opens.
+   *
+   * `openReworkBench` calls this if the bench provides it. Without it the bench
+   * appeared while the camera stayed on the room-wide view, so the player was
+   * left looking at a bench they had to find. The session's view ownership keeps
+   * the framing afterwards: state changes no longer tear the camera back.
+   */
+  frameCamera(camera: import('@babylonjs/core/Cameras/arcRotateCamera.js').ArcRotateCamera): void {
+    frameStation(camera, {
+      target: new Vector3(0, BENCH_Y, 0),
+      alpha: -Math.PI / 2,
+      beta: 1.16,
+      radius: 0.98,
+    });
   }
 
   /**
@@ -339,7 +358,14 @@ export class RcaBench {
 
 const inBand = (t: number, spec: { min: number; max: number }): boolean => t >= spec.min && t <= spec.max;
 
-function wrap(text: string, width: number): string[] {
+/**
+ * Word-wrap to a character count.
+ *
+ * Panels mix monospace and proportional faces, so a char count is an
+ * approximation — good enough for the wrapped bodies on these screens, and it
+ * keeps layout code from having to measure text on every repaint.
+ */
+export function wrap(text: string, width: number): string[] {
   const words = text.split(/\s+/);
   const lines: string[] = [];
   let line = '';
@@ -354,5 +380,3 @@ function wrap(text: string, width: number): string[] {
   if (line.trim()) lines.push(line.trim());
   return lines;
 }
-
-export { wrap };

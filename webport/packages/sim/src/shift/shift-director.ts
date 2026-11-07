@@ -135,6 +135,12 @@ export class ShiftDirector {
     return projectWafer(latent, this.station);
   }
 
+  /** The effective wafer currently under inspection, or null between wafers. */
+  currentWafer(): EffectiveWafer | null {
+    if (this.waferIndex < 0) return null;
+    return this.effectiveAt(this.waferIndex);
+  }
+
   /** Present the next wafer for inspection. */
   presentNextWafer(): WaferPresentation | null {
     if (this.phase !== 'Inspection') return null;

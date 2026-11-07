@@ -27,6 +27,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
+import { applyAuthoredRework } from './authored-rework.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = path.resolve(HERE, '..');
@@ -314,13 +315,12 @@ async function main() {
       warnings.push(`${d.id}: Unity set showContextPrompts:true on Day 3, contradicting GDD §12 "fade away by Day 3" — emitted calloutMode:Disabled instead`);
     }
   }
-  for (const r of buckets.ReworkConfigSO) {
-    if (!r.instructionsText) warnings.push(`${r.id}: instructionsText is empty (unauthored)`);
-    if (!r.idealTimingSeconds) warnings.push(`${r.id}: idealTimingSeconds is 0 (unauthored)`);
-    if (!Array.isArray(r.stepDescriptions) || r.stepDescriptions.length === 0) {
-      warnings.push(`${r.id}: stepDescriptions is empty (unauthored)`);
-    }
-  }
+  // Two of the three Unity ReworkConfigSO assets were left half-unauthored, and
+  // one was typed to the wrong procedure entirely. The authored recipes live in
+  // scripts/authored-rework.mjs and are overlaid here; this is the only place the
+  // output JSON can be corrected, because `pnpm data:convert` regenerates it and
+  // anything hand-edited into the output would be destroyed on the next run.
+  applyAuthoredRework(buckets.ReworkConfigSO, warnings);
 
   // Abort before any write so a failed conversion preserves the last usable bundle.
   if (problems.length) {

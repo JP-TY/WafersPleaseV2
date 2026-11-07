@@ -74,11 +74,10 @@
   "problems": [],
   "warnings": [
     "day-3-certification: Unity set showContextPrompts:true on Day 3, contradicting GDD §12 \"fade away by Day 3\" — emitted calloutMode:Disabled instead",
-    "rework-rcaclean: instructionsText is empty (unauthored)",
-    "rework-rcaclean: idealTimingSeconds is 0 (unauthored)",
-    "rework-rcaclean: stepDescriptions is empty (unauthored)",
-    "rework-silicide-wet-etch: instructionsText is empty (unauthored)",
-    "rework-silicide-wet-etch: idealTimingSeconds is 0 (unauthored)",
-    "rework-silicide-wet-etch: stepDescriptions is empty (unauthored)"
+    "rework-rcaclean: Unity left idealTimingSeconds 0 — emitted the authored 30s",
+    "rework-rcaclean: Unity left stepDescriptions empty — emitted the authored 4-step recipe",
+    "rework-silicide-wet-etch: Unity typed this \"RCAClean\" but it is a \"SilicideWetEtch\" procedure — emitted \"SilicideWetEtch\" so it opens the correct bench",
+    "rework-silicide-wet-etch: Unity left idealTimingSeconds 0 — emitted the authored 29s",
+    "rework-silicide-wet-etch: Unity left stepDescriptions empty — emitted the authored 3-step recipe"
   ]
 }

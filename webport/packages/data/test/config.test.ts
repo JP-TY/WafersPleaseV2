@@ -53,12 +53,11 @@ describe('converted Unity config parses and validates', () => {
     expect(bundle.scoring).not.toBeNull();
   });
 
-  it('keeps only the warnings that are genuinely unauthored in Unity', () => {
-    // Rework_RCAClean and Rework_SilicideWetEtch were empty ScriptableObjects
-    // in the Unity project. These warnings are inherited, not introduced.
-    expect(issues.filter((i) => i.severity === 'warning').map((i) => i.source).sort())
-      .toEqual(['rework-rcaclean', 'rework-rcaclean', 'rework-rcaclean',
-                'rework-silicide-wet-etch', 'rework-silicide-wet-etch', 'rework-silicide-wet-etch']);
+  it('raises no warnings, because every asset is authored', () => {
+    // The two empty Unity ReworkConfigSO assets used to warn on every run. They
+    // are now authored (see scripts/authored-rework.mjs) and the silicide asset's
+    // wrong `type` is corrected, so nothing is left unauthored to complain about.
+    expect(issues.filter((i) => i.severity === 'warning')).toEqual([]);
   });
 });
 
@@ -206,5 +205,137 @@ describe('validation catches injected faults', () => {
     if (!scoring) throw new Error('expected ScoringConfig to be present');
     scoring.salaryGradeThresholds = [0, 900, 300];
     expect(validateBundle(bad).some((i) => i.severity === 'error' && /ascending/.test(i.message))).toBe(true);
+  });
+});
+describe('rework recipes are authored, not placeholders (GDD §8)', () => {
+  const bundle = bundleFromDisk();
+  const byId = new Map(bundle.rework.map((r) => [r.id, r]));
+
+  it('every rework type has exactly one config', () => {
+    for (const t of ['RCAClean', 'SilicideWetEtch', 'CMPCalibration']) {
+      const matches = bundle.rework.filter((r) => r.type === t);
+      expect(matches.length, `${t} configs`).toBe(1);
+    }
+  });
+
+  it('the silicide etch is typed SilicideWetEtch, not RCAClean', () => {
+    // Unity serialised this asset as RCAClean, so a silicide-bridging wafer
+    // opened the twin-tank wet bench. That is a wrong-bench bug, not a label.
+    expect(byId.get('rework-silicide-wet-etch')?.type).toBe('SilicideWetEtch');
+  });
+
+  it('every rework carries a real procedure, not an empty shell', () => {
+    for (const r of bundle.rework) {
+      expect(r.instructionsText.length, `${r.id} instructions`).toBeGreaterThan(120);
+      expect(r.idealTimingSeconds, `${r.id} ideal`).toBeGreaterThan(0);
+      expect(r.toleranceWindowSeconds, `${r.id} tolerance`).toBeGreaterThan(0);
+      expect(r.failurePenalty, `${r.id} penalty`).toBeGreaterThan(0);
+      expect(r.steps.length, `${r.id} steps`).toBeGreaterThanOrEqual(3);
+      expect(r.bench.key, `${r.id} bench`).toMatch(/^[A-C]$/);
+      expect(r.bench.instrument.length, `${r.id} instrument`).toBeGreaterThan(10);
+    }
+  });
+
+  it('step keys are unique within a recipe, because the sim matches on them', () => {
+    for (const r of bundle.rework) {
+      const keys = r.steps.map((s) => s.key);
+      expect(new Set(keys).size, `${r.id} step keys`).toBe(keys.length);
+    }
+  });
+
+  it('every step nominal dwell sits inside its own window', () => {
+    for (const r of bundle.rework) {
+      for (const s of r.steps) {
+        expect(s.dwellSeconds.nominal, `${r.id}/${s.key}`).toBeGreaterThanOrEqual(s.dwellSeconds.min);
+        expect(s.dwellSeconds.nominal, `${r.id}/${s.key}`).toBeLessThanOrEqual(s.dwellSeconds.max);
+      }
+    }
+  });
+
+  it('the RCA recipe has two chemically different baths and a rinse between them', () => {
+    // The load-bearing GDD §8A rule: SC-1 then SC-2, in order, each at its own
+    // temperature, with a megasonic rinse between. A recipe that lost the rinse
+    // is not an RCA clean.
+    const rca = byId.get('rework-rcaclean')!;
+    const keys = rca.steps.map((s) => s.key);
+    expect(keys).toEqual(['SC1', 'QDR1', 'SC2', 'QDR2']);
+
+    const sc1 = rca.steps[0]!.targetC!;
+    const sc2 = rca.steps[2]!.targetC!;
+    // SC-2 is deliberately the cooler bath. Unity used one shared temperature.
+    expect(sc2.nominal).toBeLessThan(sc1.nominal);
+    expect(sc1.nominal).toBeGreaterThan(60);
+    expect(rca.steps[0]!.chemistry).toContain('NH4OH');
+    expect(rca.steps[2]!.chemistry).toContain('HCl');
+  });
+
+  it('the silicide recipe separates the strip window from the conversion anneal', () => {
+    const sil = byId.get('rework-silicide-wet-etch')!;
+    expect(sil.steps.map((s) => s.key)).toEqual(['RAMP', 'WASH', 'CONVERSION']);
+    // The wash must come after the ramp (the film must exist) and before the
+    // conversion (once C54 nucleates it is no longer strippable).
+    expect(sil.steps[1]!.purpose.toLowerCase()).toContain('c49');
+    expect(sil.steps[1]!.chemistry).toContain('NH4OH');
+  });
+
+  it('the CMP recipe ends by engaging the safety brake', () => {
+    // GDD §8C: a correct alignment arms the brake for the next 5 wafers.
+    const cmp = byId.get('rework-cmpcalibration')!;
+    expect(cmp.steps.map((s) => s.key)).toEqual(['CALIBRATE', 'ALIGN', 'LOCK']);
+    expect(cmp.steps[2]!.purpose.toLowerCase()).toContain('brake');
+  });
+
+  it('every step states a purpose, so the player is told why the step exists', () => {
+    for (const r of bundle.rework) {
+      for (const s of r.steps) {
+        expect(s.purpose.length, `${r.id}/${s.key}`).toBeGreaterThan(20);
+      }
+    }
+  });
+
+  it('validation rejects an unauthored rework rather than warning about it', () => {
+    // The gap that started this: an empty procedure meant the player was asked to
+    // fix a defect using instructions nobody wrote. That is an error, not a note.
+    const broken = {
+      ...bundle,
+      rework: bundle.rework.map((r) =>
+        r.id === 'rework-rcaclean'
+          ? { ...r, instructionsText: '', idealTimingSeconds: 0, steps: [], stepDescriptions: [] }
+          : r,
+      ),
+    };
+    const found = validateBundle(broken);
+    const rcaIssues = found.filter((i) => i.source === 'rework-rcaclean');
+    expect(rcaIssues.length).toBeGreaterThan(0);
+    expect(rcaIssues.every((i) => i.severity === 'error')).toBe(true);
+  });
+
+  it('validation rejects a step whose nominal dwell is outside its window', () => {
+    const broken = {
+      ...bundle,
+      rework: bundle.rework.map((r) =>
+        r.id === 'rework-rcaclean'
+          ? {
+              ...r,
+              steps: r.steps.map((s, i) =>
+                i === 0 ? { ...s, dwellSeconds: { ...s.dwellSeconds, nominal: 999 } } : s,
+              ),
+            }
+          : r,
+      ),
+    };
+    const found = validateBundle(broken);
+    expect(found.some((i) => i.severity === 'error' && /nominal dwell/.test(i.message))).toBe(true);
+  });
+
+  it('validation rejects a recipe missing a GDD §8 bench', () => {
+    const broken = {
+      ...bundle,
+      rework: bundle.rework.map((r) =>
+        r.id === 'rework-cmpcalibration' ? { ...r, bench: { key: 'unknown', title: 'Unassigned', instrument: '' } } : r,
+      ),
+    };
+    const found = validateBundle(broken);
+    expect(found.some((i) => i.severity === 'error' && /bench/.test(i.message))).toBe(true);
   });
 });
