@@ -69,6 +69,10 @@ export interface RcaCleanState {
   immersed: boolean;
   /** Seconds spent immersed in the current step. */
   dwellSeconds: number;
+  /** Arrhenius (or rinse) exposure accumulated while immersed this step. */
+  exposure: number;
+  /** Substrate damage accrued across chemical steps so far. */
+  cumulativeDamage: number;
   /** True once the step's timer has run past any plausible recovery. */
   timedOut: boolean;
   finished: boolean;
@@ -184,17 +188,18 @@ export const rcaWithdrawCue = (s: RcaCleanState): RcaWithdrawCue => {
  * disagree with the simulation it is supposed to be reporting. One function, one
  * answer.
  */
-export const rcaExposure = (s: RcaCleanState): number => {
+export const rcaExposure = (s: RcaCleanState): number => s.exposure;
+
+/** Instantaneous exposure rate for the active step at the current bath temp. */
+export const rcaExposureRate = (s: RcaCleanState): number => {
   if (s.step.kind === 'QDR1' || s.step.kind === 'QDR2') {
-    // A rinse is a transfer function, not a reaction: linear in dwell, with no
-    // Arrhenius term and no attack on the substrate.
-    return (s.dwellSeconds / s.step.dwellSeconds) * PROCESS.rca.completionExposure;
+    return PROCESS.rca.completionExposure / Math.max(s.step.dwellSeconds, 1e-6);
   }
   const bath = s.step.kind === 'SC2' ? s.baths.sc2 : s.baths.sc1;
-  const rate =
+  return (
     PROCESS.rca.preExponential *
-    arrheniusRatio(bath.temperatureC, s.step.targetC.nominal, PROCESS.rca.activationEnergyJPerMol);
-  return rate * s.dwellSeconds;
+    arrheniusRatio(bath.temperatureC, s.step.targetC.nominal, PROCESS.rca.activationEnergyJPerMol)
+  );
 };
 
 /** Fraction of the target film removed. Bounded by 1 by construction. */
@@ -246,6 +251,8 @@ export const createRcaClean = (
     active: 'sc1',
     immersed: false,
     dwellSeconds: 0,
+    exposure: 0,
+    cumulativeDamage: 0,
     timedOut: false,
     finished: false,
     result: null,
@@ -283,6 +290,7 @@ export const createRcaClean = (
     state.stepIndex++;
     state.step = steps[state.stepIndex] ?? steps[steps.length - 1]!;
     state.dwellSeconds = 0;
+    state.exposure = 0;
     state.immersed = false;
     state.active = state.step.kind === 'SC2' ? 'sc2' : state.step.kind === 'QDR1' || state.step.kind === 'QDR2' ? 'qdr' : 'sc1';
   };
@@ -307,6 +315,7 @@ export const createRcaClean = (
 
     if (!state.immersed) return;
     state.dwellSeconds += dt;
+    state.exposure += rcaExposureRate(state) * dt;
 
     // Hard ceiling: far past any recovery, and for SC-2 it is destructive.
     const ceiling = state.step.dwellSeconds * 3;
@@ -341,6 +350,7 @@ export const createRcaClean = (
         // Dwell starts at immersion, not during a descent animation. The Unity
         // version charged its 0.4 s dip to the soak.
         state.dwellSeconds = 0;
+        state.exposure = 0;
         return;
       }
 
@@ -387,10 +397,11 @@ export const createRcaClean = (
       return;
     }
 
-    // Step passed.
+    // Bank chemical damage so the final rinse cannot erase earlier surplus.
+    if (!isRinse) state.cumulativeDamage += damage;
+
     if (state.stepIndex >= steps.length - 1) {
-      // Reward a step that finished close to its window without surplus exposure.
-      const quality = clamp01(1 - damage / Math.max(PROCESS.rca.damageLimit * 2, 1e-6));
+      const quality = clamp01(1 - state.cumulativeDamage / Math.max(PROCESS.rca.damageLimit * 2, 1e-6));
       resolve({
         outcome: 'success',
         success: true,

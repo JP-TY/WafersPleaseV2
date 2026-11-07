@@ -1,12 +1,12 @@
 /**
  * Asset budget gate — the Phase 1 exit criterion, asserted in CI.
  *
- * Fails if the shipped prop set exceeds the total budget, or if any single
- * prop is large enough to stall headset streaming on its own. Run standalone
- * with `pnpm assets:budget`; also invoked at the end of build-assets.mjs.
+ * Read-only: fails if the shipped prop set exceeds the total budget, or if any
+ * single prop is large enough to stall headset streaming. Does not rewrite
+ * manifest.json (that belongs to build-assets.mjs). Run with `pnpm assets:budget`.
  */
 
-import { readdir, stat, mkdir, writeFile } from 'node:fs/promises';
+import { readdir, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,11 +63,6 @@ async function main() {
   }
 
   console.log(`\nPASS — ${mib(total)} of ${mib(BUDGET_TOTAL)} budget used.`);
-  await mkdir(path.join(PKG_ROOT, 'public'), { recursive: true });
-  await writeFile(
-    path.join(OUT_DIR, 'manifest.json'),
-    `${JSON.stringify({ generatedBy: 'packages/content/scripts/build-assets.mjs', budgetTotal: BUDGET_TOTAL, props: sizes }, null, 2)}\n`
-  );
 }
 
 main().catch((err) => {

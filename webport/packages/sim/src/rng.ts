@@ -103,6 +103,10 @@ export class Rng {
     if (min === max) return min;
 
     const span = max - min + 1;
+    // Rejection sampling needs span ≤ 2^32; wider ranges make limit 0 and hang.
+    if (span > 4294967296) {
+      throw new RangeError(`nextInt span ${span} exceeds 32-bit generator range`);
+    }
     // Largest multiple of span that fits in 32 bits; reject the remainder.
     const limit = Math.floor(4294967296 / span) * span;
     let v: number;

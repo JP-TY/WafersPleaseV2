@@ -187,8 +187,13 @@ export const sample = (s: CmpState): CmpSample => {
 /** What the operator would infer the endpoint time is from the current trace. */
 export const apparentEndpointSeconds = (s: CmpState): number => {
   const scale = thicknessScaleFor(s.calibration.wavelength);
-  // Time to endpoint as the operator computes it from a mis-scaled trace.
-  return s.true_.endpointSeconds * scale;
+  // Same phase offset sample() applies to thickness, converted to a time bias.
+  const offsetNm = ((s.calibration.phase / (Math.PI * 2)) - 0.5) * 8 * scale;
+  const impliedRate = Math.max(
+    (PROCESS.cmp.initialOverburdenNm - s.true_.endpointNm) / Math.max(s.true_.endpointSeconds, 1e-6),
+    1e-6,
+  );
+  return Math.max(0, s.true_.endpointSeconds * scale + offsetNm / impliedRate);
 };
 
 export const rollCmpInstrument = (rng: Rng, difficulty: number): CmpInstrumentCalibration => {
@@ -325,24 +330,26 @@ export const createCmpEndpoint = (
           return;
         }
 
-        if (readingError <= tolerance) {
+        // An early lock before the knee has entered the data cannot succeed,
+        // even when wavelength is already at the reference (readingError ≈ 0).
+        if (early || readingError > tolerance) {
           resolve({
-            outcome: 'success',
-            success: true,
-            quality: clamp01(1 - (readingError / Math.max(tolerance, 1e-6) + overPolish / Math.max(timeLimitSeconds, 1e-6)) / 2),
-            detail: `Endpoint read at ${apparent.toFixed(2)} s against a true ${endpointSeconds.toFixed(2)} s — inside the ${uncertainty.toFixed(2)} s noise floor at gain ${state.calibration.gain.toFixed(2)}${overPolish > 0 ? `, with ${overPolish.toFixed(2)} s of over-polish already taken` : ', with the pad stopped clean'}. Safety brake armed for the next ${brakeWafers} wafers.`,
+            outcome: 'outOfSpec',
+            success: false,
+            quality: clamp01(1 - readingError / (tolerance * 6)),
+            detail: early
+              ? `Endpoint committed ${(endpointSeconds - state.elapsedSeconds).toFixed(2)} s before the knee was in the data — you locked a guess. The reading is off by ${readingError.toFixed(2)} s against a ${tolerance.toFixed(2)} s limit.`
+              : `Endpoint read ${readingError.toFixed(2)} s ${apparent > endpointSeconds ? 'long' : 'short'} — ${readingError > tolerance * 3 ? 'far outside' : 'outside'} the ${tolerance.toFixed(2)} s resolvable at gain ${state.calibration.gain.toFixed(2)}. ${nitrideLoss.toFixed(0)} nm of nitride eroded and ${dishing.toFixed(0)} nm of dishing: inside the scrap limits, but the brake did not arm cleanly.`,
             irreversible: false,
           });
           return;
         }
 
         resolve({
-          outcome: 'outOfSpec',
-          success: false,
-          quality: clamp01(1 - readingError / (tolerance * 6)),
-          detail: early
-            ? `Endpoint committed ${(endpointSeconds - state.elapsedSeconds).toFixed(2)} s before the knee was in the data — you locked a guess. The reading is off by ${readingError.toFixed(2)} s against a ${tolerance.toFixed(2)} s limit.`
-            : `Endpoint read ${readingError.toFixed(2)} s ${apparent > endpointSeconds ? 'long' : 'short'} — ${readingError > tolerance * 3 ? 'far outside' : 'outside'} the ${tolerance.toFixed(2)} s resolvable at gain ${state.calibration.gain.toFixed(2)}. ${nitrideLoss.toFixed(0)} nm of nitride eroded and ${dishing.toFixed(0)} nm of dishing: inside the scrap limits, but the brake did not arm cleanly.`,
+          outcome: 'success',
+          success: true,
+          quality: clamp01(1 - (readingError / Math.max(tolerance, 1e-6) + overPolish / Math.max(timeLimitSeconds, 1e-6)) / 2),
+          detail: `Endpoint read at ${apparent.toFixed(2)} s against a true ${endpointSeconds.toFixed(2)} s — inside the ${uncertainty.toFixed(2)} s noise floor at gain ${state.calibration.gain.toFixed(2)}${overPolish > 0 ? `, with ${overPolish.toFixed(2)} s of over-polish already taken` : ', with the pad stopped clean'}. Safety brake armed for the next ${brakeWafers} wafers.`,
           irreversible: false,
         });
         return;

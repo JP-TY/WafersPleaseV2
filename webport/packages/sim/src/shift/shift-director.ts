@@ -166,6 +166,9 @@ export class ShiftDirector {
   stampWafer(action: PlayerAction, toolsUsed: readonly ToolType[], durationSeconds = WAFER_SECONDS_DEFAULT): StampResult {
     if (this.phase !== 'Inspection') throw new Error(`cannot stamp during ${this.phase}`);
     if (this.waferIndex < 0) throw new Error('no wafer presented');
+    if (this.ledger.get(this.waferIndex)) {
+      throw new Error(`wafer ${this.waferIndex} already stamped`);
+    }
 
     const eff = this.effectiveAt(this.waferIndex);
     const result = evaluateDisposition({
@@ -284,9 +287,13 @@ export class ShiftDirector {
     const i = order.indexOf(this.phase);
     if (i < 0 || i >= order.length - 1) throw new Error(`cannot advance from ${this.phase}`);
     if (this.phase === 'Inspection') {
-      // Only allowed to leave Inspection once every wafer is dispositioned.
+      // Only allowed to leave Inspection once every wafer is dispositioned
+      // and every pending rework has resolved.
       if (this.ledger.count < this.lot.wafers.length) {
         throw new Error('cannot end shift with wafers remaining');
+      }
+      if (this.pendingRework.size > 0) {
+        throw new Error('cannot leave Inspection with pending rework');
       }
     }
     this.phase = order[i + 1]!;
@@ -296,6 +303,9 @@ export class ShiftDirector {
   completeShift(): { gate: ReturnType<typeof evaluateGate>; debrief: DebriefReport } {
     if (this.ledger.count < this.lot.wafers.length) {
       throw new Error('cannot complete shift with wafers remaining');
+    }
+    if (this.pendingRework.size > 0) {
+      throw new Error('cannot complete shift with pending rework');
     }
     const metrics = this.ledger.metrics();
     const gate = evaluateGate(
