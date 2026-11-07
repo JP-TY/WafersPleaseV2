@@ -1,0 +1,23 @@
+name: Asset budget
+
+on:
+  push:
+    paths:
+      - 'webport/packages/content/**'
+      - '.github/workflows/assets-budget.yml'
+  pull_request:
+    paths:
+      - 'webport/packages/content/**'
+      - '.github/workflows/assets-budget.yml'
+
+jobs:
+  budget:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Asset budget gate
+        working-directory: webport
+        run: node packages/content/scripts/check-asset-budget.mjs
