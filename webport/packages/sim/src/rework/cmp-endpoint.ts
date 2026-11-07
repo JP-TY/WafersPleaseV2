@@ -37,6 +37,7 @@ import {
   type ReworkResult,
 } from './process.js';
 import type { Rng } from '../rng.js';
+import { CMP_BRAKE_WAFERS, type Recipe } from './recipes.js';
 
 export interface CmpInstrumentCalibration {
   /** Detector gain, 0.1..1. Sets SNR. */
@@ -51,6 +52,10 @@ export interface CmpInstrumentCalibration {
 export interface CmpTrueState {
   /** Remaining overburden at the current moment, nm. Mutated as polish proceeds. */
   remainingNm: number;
+  /** Starting overburden for this wafer, nm. Fixed for the run. */
+  readonly initialOverburdenNm: number;
+  /** Removal rate used by the polish, nm per game second. */
+  readonly removalRateNmPerSecond: number;
   /** True endpoint thickness, i.e. when remaining hits the exposure threshold. */
   readonly endpointNm: number;
   /** True endpoint time, game seconds — the answer the player must find. */
@@ -80,6 +85,12 @@ export interface CmpState {
   lockedEndpointSeconds: number | null;
   /** Seconds of polish beyond the true endpoint — the over-polish budget. */
   overPolishSeconds: number;
+  /** Shift clock for this run, from the authored recipe when present. */
+  readonly timeLimitSeconds: number;
+  /** Wafers the safety brake covers on a clean lock. */
+  readonly brakeWafers: number;
+  /** Authored timing tolerance floor, game seconds (scaled into the lock check). */
+  readonly toleranceSeconds: number;
   finished: boolean;
   result: ReworkResult | null;
 }
@@ -126,24 +137,47 @@ export const thicknessScaleFor = (wavelengthIndex: number): number =>
   0.5 + wavelengthIndex / 10;
 
 /** Fringe noise amplitude: falls with detector gain. */
-const noiseAmplitude = (gain: number): number =>
+export const noiseAmplitude = (gain: number): number =>
   // High gain is clean; low gain buries the knee. Floor of ~2 nm.
   26 * (1 - clamp01(gain)) ** 2 + 2;
+
+/**
+ * Apparent remaining thickness under the current instrument errors.
+ *
+ * Exported so the scope draws the SAME transformation the lock grades —
+ * otherwise knobs move a number the player never sees on the curve.
+ */
+export const apparentRemainingNm = (
+  trueRemainingNm: number,
+  calibration: CmpInstrumentCalibration,
+  elapsedSeconds: number,
+): number => {
+  const scale = thicknessScaleFor(calibration.wavelength);
+  const scaled = Math.max(0, trueRemainingNm) / scale;
+  const offset = ((calibration.phase / (Math.PI * 2)) - 0.5) * 8 * scale;
+  const noise = noiseAmplitude(calibration.gain);
+  const jitter = Math.sin(elapsedSeconds * 7.3 + calibration.phase * 3.1) * noise;
+  return Math.max(0, scaled + offset + jitter);
+};
+
+/**
+ * True remaining thickness at polish time `t`.
+ *
+ * Linear removal from the wafer's initial overburden. Shared by sample() and the
+ * scope so the reference knee and the live playhead cannot disagree.
+ */
+export const trueRemainingAt = (
+  t: number,
+  initialOverburdenNm: number,
+  removalRateNmPerSecond: number,
+): number => Math.max(0, initialOverburdenNm - removalRateNmPerSecond * Math.max(0, t));
 
 /** A single reading from the instrument. */
 export const sample = (s: CmpState): CmpSample => {
   const remaining = Math.max(0, s.true_.remainingNm);
-  const scale = thicknessScaleFor(s.calibration.wavelength);
-  // Wavelength miscalibration is a multiplicative error on thickness.
-  const scaled = remaining / scale;
-  // Phase is an additive fringe offset, i.e. a constant thickness offset.
-  const offset = ((s.calibration.phase / (Math.PI * 2)) - 0.5) * 8 * scale;
   const noise = noiseAmplitude(s.calibration.gain);
-  // Deterministic pseudo-noise from the calibrated phase — same calibration,
-  // same reading, so the trace is reproducible.
-  const jitter = Math.sin(s.true_.elapsedSeconds * 7.3 + s.calibration.phase * 3.1) * noise;
   return {
-    apparentNm: Math.max(0, scaled + offset + jitter),
+    apparentNm: apparentRemainingNm(remaining, s.calibration, s.true_.elapsedSeconds),
     trueNm: remaining,
     reflectance: reflectanceAt(remaining),
     noiseNm: noise,
@@ -175,6 +209,7 @@ export const rollCmpInstrument = (rng: Rng, difficulty: number): CmpInstrumentCa
 export const createCmpEndpoint = (
   rng: Rng,
   difficulty: number,
+  recipe?: Recipe,
 ): ReworkMinigame<CmpState, CmpAction> => {
   const overburden = PROCESS.cmp.initialOverburdenNm * (1 + rng.nextRange(-0.08, 0.08));
   const rate = PROCESS.cmp.removalRateNmPerSecond * (1 + rng.nextRange(-0.06, 0.06));
@@ -182,10 +217,22 @@ export const createCmpEndpoint = (
   const endpointSeconds = Math.max(1, (overburden - endpointNm) / rate);
   void difficulty;
 
+  // Authored ideal timing is the polish window; the shift clock is twice that so
+  // a late lock is still possible. Without a recipe we keep the documented 40 s.
+  const timeLimitSeconds =
+    recipe && recipe.nominalSeconds > 0 ? Math.max(recipe.nominalSeconds * 2, 20) : CMP_TIME_LIMIT_SECONDS;
+  const toleranceSeconds = recipe && recipe.toleranceSeconds > 0 ? recipe.toleranceSeconds : 5;
+  const brakeWafers = recipe?.brakeWafers ?? CMP_BRAKE_WAFERS;
+  // Map authored tolerance (seconds of procedure slop) onto the instrument lock
+  // floor so editing rework.json changes what the sim enforces.
+  const toleranceFloor = Math.max(0.08, toleranceSeconds * 0.024);
+
   const state: CmpState = {
     calibration: rollCmpInstrument(rng, difficulty),
     true_: {
       remainingNm: overburden,
+      initialOverburdenNm: overburden,
+      removalRateNmPerSecond: rate,
       endpointNm,
       endpointSeconds,
       elapsedSeconds: 0,
@@ -194,6 +241,9 @@ export const createCmpEndpoint = (
     committed: false,
     lockedEndpointSeconds: null,
     overPolishSeconds: 0,
+    timeLimitSeconds,
+    brakeWafers,
+    toleranceSeconds,
     finished: false,
     result: null,
   };
@@ -213,13 +263,13 @@ export const createCmpEndpoint = (
     // not the model has finished counting the last nanometre.
     state.overPolishSeconds = Math.max(0, state.elapsedSeconds - endpointSeconds);
 
-    if (state.elapsedSeconds >= CMP_TIME_LIMIT_SECONDS) {
+    if (state.elapsedSeconds >= timeLimitSeconds) {
       resolve({
         outcome: 'timeout',
         success: false,
         quality: 0,
         detail:
-          'The polish ran past the shift clock with the endpoint uncommitted. The safety brake never armed, so the next five wafers polish into nitride erosion and field-oxide dishing with nothing to stop them.',
+          `The polish ran past the shift clock with the endpoint uncommitted. The safety brake never armed, so the next ${brakeWafers} wafers polish into nitride erosion and field-oxide dishing with nothing to stop them.`,
         irreversible: true,
       });
     }
@@ -259,7 +309,7 @@ export const createCmpEndpoint = (
 
         const uncertainty = noiseAmplitude(state.calibration.gain) / rate;
         const readingError = Math.abs(apparent - endpointSeconds);
-        const tolerance = Math.max(uncertainty * 1.5, 0.12);
+        const tolerance = Math.max(uncertainty * 1.5, toleranceFloor);
 
         const overPolish = Math.max(0, state.elapsedSeconds - endpointSeconds);
         const early = state.elapsedSeconds < endpointSeconds;
@@ -298,8 +348,8 @@ export const createCmpEndpoint = (
         resolve({
           outcome: 'success',
           success: true,
-          quality: clamp01(1 - (readingError / Math.max(tolerance, 1e-6) + overPolish / Math.max(CMP_TIME_LIMIT_SECONDS, 1e-6)) / 2),
-          detail: `Endpoint read at ${apparent.toFixed(2)} s against a true ${endpointSeconds.toFixed(2)} s — inside the ${uncertainty.toFixed(2)} s noise floor at gain ${state.calibration.gain.toFixed(2)}${overPolish > 0 ? `, with ${overPolish.toFixed(2)} s of over-polish already taken` : ', with the pad stopped clean'}. Safety brake armed for the next five wafers.`,
+          quality: clamp01(1 - (readingError / Math.max(tolerance, 1e-6) + overPolish / Math.max(timeLimitSeconds, 1e-6)) / 2),
+          detail: `Endpoint read at ${apparent.toFixed(2)} s against a true ${endpointSeconds.toFixed(2)} s — inside the ${uncertainty.toFixed(2)} s noise floor at gain ${state.calibration.gain.toFixed(2)}${overPolish > 0 ? `, with ${overPolish.toFixed(2)} s of over-polish already taken` : ', with the pad stopped clean'}. Safety brake armed for the next ${brakeWafers} wafers.`,
           irreversible: false,
         });
         return;

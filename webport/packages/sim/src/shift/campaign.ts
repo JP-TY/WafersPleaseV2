@@ -146,7 +146,8 @@ export class Campaign {
   }
 
   get isComplete(): boolean {
-    return this.records.length >= this.cfg.days.length;
+    // Coverage of configured day numbers, not attempt-history length.
+    return this.cfg.days.every((d) => this.records.some((r) => r.dayNumber === d.dayNumber && r.passed));
   }
 
   /**
@@ -162,7 +163,10 @@ export class Campaign {
     if (this.records.some((r) => r.dayNumber === dayNumber && r.passed)) return 'passed';
     const earlier = this.cfg.days.filter((x) => x.dayNumber < dayNumber);
     const allPassed = earlier.every((x) => this.records.some((r) => r.dayNumber === x.dayNumber && r.passed));
-    return allPassed ? 'available' : 'locked';
+    if (!allPassed) return 'locked';
+    // Preserve retry eligibility while still reporting a recorded failure.
+    if (this.records.some((r) => r.dayNumber === dayNumber && !r.passed)) return 'failed';
+    return 'available';
   }
 
   /**
@@ -187,8 +191,13 @@ export class Campaign {
    * result is only meaningful once the shift has been played.
    */
   createDirector(): ShiftDirector {
+    // Give the director the relaxed campaign target so gate + debrief match progression.
+    const day = {
+      ...this.day,
+      competencyTarget: this.competencyTargetFor() * 100,
+    };
     const cfg: ShiftInputs = {
-      day: this.day,
+      day,
       defects: this.cfg.defects,
       ruleMatrix: this.ruleMatrix,
       scoring: this.cfg.scoring,
@@ -217,7 +226,9 @@ export class Campaign {
   recordDay(director: ShiftDirector, boostsEarned: number): CampaignDayRecord {
     const gate = director.completeShift();
     const target = this.competencyTargetFor();
-    const passed = gate.gate.salaryTotal >= gate.gate.salaryTarget && gate.debrief.competencyScore >= target;
+    // Each quiz boost is a permanent +1pp competency rating (GDD §12).
+    const boostedScore = Math.min(1, gate.debrief.competencyScore + boostsEarned * 0.01);
+    const passed = gate.gate.salaryTotal >= gate.gate.salaryTarget && boostedScore >= target;
 
     const totals = director.metrics.totals;
     const record: CampaignDayRecord = {
@@ -225,15 +236,16 @@ export class Campaign {
       seed: seedForDay(this.cfg.seed, this.dayNumber),
       passed,
       salaryTotal: gate.gate.salaryTotal,
-      competencyScore: gate.debrief.competencyScore,
+      competencyScore: boostedScore,
       boostsEarned,
       reworkAttempts: totals.reworkAttempts,
       reworkSuccesses: totals.reworkSuccesses,
       killerFalseAccepts: totals.killerFalseAccepts,
-      report: gate.debrief,
+      report: { ...gate.debrief, competencyScore: boostedScore },
     };
     this.records.push(record);
-    // Permanent for the run: banked immediately, never spent.
+    // Permanent for the run: banked immediately, never spent. Caller must pass
+    // only this day's increment (not the running total).
     this.boosts += boostsEarned;
     return record;
   }
@@ -245,7 +257,17 @@ export class Campaign {
    * to the old one cannot be surprised by it moving underneath them.
    */
   advance(): Campaign {
-    const nextDay = Math.min(this.dayNumber + 1, Math.max(...this.cfg.days.map((d) => d.dayNumber)));
+    const maxDay = Math.max(...this.cfg.days.map((d) => d.dayNumber));
+    if (this.dayNumber >= maxDay) {
+      return new Campaign(this.cfg, maxDay, this.boosts, this.records);
+    }
+    if (this.statusOf(this.dayNumber) !== 'passed') {
+      throw new Error(`cannot advance from day ${this.dayNumber} until it is passed`);
+    }
+    const nextDay = this.dayNumber + 1;
+    if (this.statusOf(nextDay) === 'locked') {
+      throw new Error(`day ${nextDay} is still locked`);
+    }
     return new Campaign(this.cfg, nextDay, this.boosts, this.records);
   }
 
@@ -280,11 +302,16 @@ export class Campaign {
     boostsEarned: number;
   }> {
     return this.cfg.days.map((d) => {
-      const rec = this.records.find((r) => r.dayNumber === d.dayNumber);
+      const attempts = this.records.filter((r) => r.dayNumber === d.dayNumber);
+      const status = this.statusOf(d.dayNumber);
+      const rec =
+        status === 'passed'
+          ? [...attempts].reverse().find((r) => r.passed)
+          : attempts[attempts.length - 1];
       return {
         dayNumber: d.dayNumber,
         title: d.briefingText.split('\n')[0] ?? `DAY ${d.dayNumber}`,
-        status: this.statusOf(d.dayNumber),
+        status,
         salaryTarget: d.salaryTarget,
         competencyTarget: this.competencyTargetFor(d.dayNumber),
         passed: rec?.passed ?? null,

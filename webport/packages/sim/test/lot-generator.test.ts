@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
-import { generateLot, projectWafer, routingWeightsFor, MAX_DEFECT_SLOTS } from '../src/generation/lot-generator.js';
+import {
+  generateLot,
+  projectWafer,
+  routingWeightsFor,
+  MAX_DEFECT_SLOTS,
+  ensureReworkableWafer,
+} from '../src/generation/lot-generator.js';
+import type { LatentWafer } from '../src/generation/wafer.js';
 import { DEFECT_ROUTING, ROUTING_METROLOGY, INITIAL_STATION_STATE, armCmpBrake, tickCmpBrake } from '../src/generation/wafer.js';
 import type { DayConfig, DefectProfile } from '@wafers/data';
 import { readFileSync } from 'node:fs';
@@ -74,6 +81,35 @@ describe('routing-step-first sampling', () => {
       const p = DEFECTS.find((x) => x.id === d)!;
       expect(DEFECT_ROUTING[p.defectType]).toBe('Substrate');
     }
+  });
+
+  it('ensureReworkableWafer does not leave cross-layer defects after rewrite', () => {
+    const pool = DEFECTS.filter(
+      (d) => d.defectType === 'SubstrateContamination' || d.defectType === 'InterfaceRoughness',
+    );
+    const wafers: LatentWafer[] = [
+      {
+        index: 0,
+        routingStep: 'HighKMetalGate',
+        drawCount: 5,
+        latentDefects: [
+          {
+            defectType: 'InterfaceRoughness',
+            defectClass: 'Parametric',
+            severity: 0.4,
+            regionX: 0.2,
+            regionY: 0.3,
+          },
+        ],
+      },
+    ];
+    const out = ensureReworkableWafer({ wafers }, pool);
+    const w = out.wafers[0]!;
+    expect(w.routingStep).toBe(DEFECT_ROUTING.SubstrateContamination);
+    for (const d of w.latentDefects) {
+      expect(DEFECT_ROUTING[d.defectType]).toBe(w.routingStep);
+    }
+    expect(w.latentDefects.some((d) => d.defectType === 'SubstrateContamination')).toBe(true);
   });
 
   it('a wafer only carries defects valid at its own routing step', () => {

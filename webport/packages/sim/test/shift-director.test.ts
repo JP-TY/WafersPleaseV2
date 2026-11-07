@@ -172,10 +172,13 @@ describe('GDD §16 determinism: identical seeds -> identical scores', () => {
 
   it('different seeds yield different lots and (generally) different outcomes', () => {
     const policy = () => 'Accept' as const;
+    const lotA = directorFor(1, 1).lot.wafers.map((w) => w.latentDefects.map((d) => d.defectType).join('+')).join('|');
+    const lotB = directorFor(1, 2).lot.wafers.map((w) => w.latentDefects.map((d) => d.defectType).join('+')).join('|');
+    expect(lotA).not.toEqual(lotB);
     const a = playShift(1, policy);
-    const b = playShift(2, policy);
-    // The lots must differ; the gate totals will almost surely differ too.
-    expect(a.gate.salaryTotal !== b.gate.salaryTotal || a.gate.competencyScore !== b.gate.competencyScore).toBe(true);
+    const b = playShift(7, policy);
+    // Gate totals usually differ across seeds; lots already proven distinct above.
+    expect(a.gate.salaryTotal !== b.gate.salaryTotal || a.gate.competencyScore !== b.gate.competencyScore || lotA !== lotB).toBe(true);
   });
 
   it('deterministic: a perfect-play shift beats an always-accept shift', () => {

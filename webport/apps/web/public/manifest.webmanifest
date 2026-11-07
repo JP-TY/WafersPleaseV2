@@ -1,0 +1,24 @@
+{
+  "name": "Wafers Please",
+  "short_name": "WafersPlease",
+  "description": "Training-first semiconductor wafer disposition — diegetic cleanroom.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d1520",
+  "theme_color": "#0d1520",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

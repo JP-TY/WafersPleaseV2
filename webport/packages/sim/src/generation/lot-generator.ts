@@ -174,12 +174,68 @@ export function generateLot(inputs: LotInputs): LatentLot {
     });
   }
 
+  // Post-draw guarantee: when the day's pool includes a Rework-class defect,
+  // every shift must present at least one so the rework bench is reachable.
+  // Runs after all RNG draws so draw counts stay fixed and the lot remains a
+  // pure function of (seed, day, defects).
+  const guaranteed = ensureReworkableWafer({ wafers }, pool);
+
   return {
     seed: run.seed,
     substituted: run.substituted,
     dayNumber: inputs.day.dayNumber,
-    wafers,
+    wafers: guaranteed.wafers,
   };
+}
+
+/**
+ * Guarantee at least one reworkable wafer when the day can produce one.
+ *
+ * Measured gap: Day 1 lacked a reworkable wafer in ~1/3 of seeds, so players
+ * finished the training day without meeting the RCA bench. Injection is
+ * deterministic (lowest wafer index compatible with the first Rework profile)
+ * and never draws from the RNG stream.
+ */
+export function ensureReworkableWafer(
+  lot: { readonly wafers: readonly LatentWafer[] },
+  pool: readonly DefectProfile[],
+): { readonly wafers: readonly LatentWafer[] } {
+  const reworkProfiles = pool.filter((d) => d.defaultAction === 'Rework');
+  if (reworkProfiles.length === 0) return lot;
+
+  const actionOf = (defectType: string): string =>
+    pool.find((p) => p.defectType === defectType)?.defaultAction ?? 'Reject';
+
+  /** Wafer-level disposition is Rework only when Rework is present and Reject is not. */
+  const isReworkDisposition = (w: LatentWafer): boolean => {
+    const actions = w.latentDefects.map((d) => actionOf(d.defectType));
+    return actions.includes('Rework') && !actions.includes('Reject');
+  };
+
+  if (lot.wafers.some(isReworkDisposition)) return lot;
+
+  const profile = reworkProfiles[0]!;
+  const layer = DEFECT_ROUTING[profile.defectType];
+  let targetIdx = lot.wafers.findIndex((w) => w.routingStep === layer);
+  if (targetIdx < 0) targetIdx = 0;
+
+  const injected: LatentDefect = {
+    defectType: profile.defectType,
+    defectClass: profile.defectClass,
+    severity: profile.severity,
+    // Fixed region — not an RNG draw; presentation only.
+    regionX: 0.42,
+    regionY: 0.58,
+  };
+
+  const wafers = lot.wafers.map((w, i) => {
+    if (i !== targetIdx) return w;
+    // Replace with a single Rework defect so conflicting Reject defects cannot
+    // escalate the wafer-level disposition away from the bench.
+    return { ...w, routingStep: layer, latentDefects: [injected] };
+  });
+
+  return { wafers };
 }
 
 /**

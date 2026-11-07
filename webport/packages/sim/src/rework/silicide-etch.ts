@@ -46,6 +46,7 @@ import {
   type ReworkResult,
 } from './process.js';
 import type { Rng } from '../rng.js';
+import type { Recipe } from './recipes.js';
 
 export type SilicidePhase = 'C49' | 'Transition' | 'C54';
 
@@ -70,6 +71,9 @@ export interface SilicideEtchState {
   readonly tauSeconds: number;
   /** Player's total ultrasonic wash time, game seconds. */
   washSeconds: number;
+  /** Inclusive wash window the commit grades against (from recipe). */
+  readonly washMinSeconds: number;
+  readonly washMaxSeconds: number;
   /** True while the ultrasonic transducer is running. */
   washing: boolean;
   /** Remaining Ti contact thickness, nm. */
@@ -128,32 +132,60 @@ export interface SilicideRecipe {
   readonly tauSeconds: number;
   /** Randomised so two wafers do not present identical pressure. */
   readonly tauJitter: number;
+  /** Inclusive ultrasonic wash window, game seconds. */
+  readonly washMinSeconds: number;
+  readonly washMaxSeconds: number;
+  /** Authored procedure for SOP cards / failure penalty. */
+  readonly procedure: Recipe | null;
 }
+
+/** Default wash window when no authored recipe is supplied. */
+export const DEFAULT_WASH_WINDOW = { min: 0.35, max: 2.2 } as const;
 
 /**
  * Roll the per-wafer recipe.
  *
  * Unity rolled only `c49Duration` in 10-14 s and left `transitionDuration`
  * fixed. Here a single time constant governs the whole curve, jittered per
- * wafer, with the 45 nm retardation baked into the nominal.
+ * wafer, with the 45 nm retardation baked into the nominal. When an authored
+ * `Recipe` is supplied, the WASH dwell window and RAMP nominal drive the
+ * simulation instead of the hardcoded constants.
  */
-export const rollSilicideRecipe = (rng: Rng, difficulty: number): SilicideRecipe => {
+export const rollSilicideRecipe = (
+  rng: Rng,
+  difficulty: number,
+  procedure?: Recipe,
+): SilicideRecipe => {
+  const wash = procedure?.steps.find((s) => s.key === 'WASH');
+  const ramp = procedure?.steps.find((s) => s.key === 'RAMP');
   // Nominal conversion time constant, game seconds. Retarded by the narrow-line
-  // factor because this node is 45 nm.
-  const nominalTau = 11.0 * PROCESS.silicide.narrowLineRetardation;
+  // factor because this node is 45 nm. Authored RAMP dwell replaces the 11 s base.
+  const base = ramp?.dwellSeconds ?? 11.0;
+  const nominalTau = base * PROCESS.silicide.narrowLineRetardation;
   // Higher difficulty shortens the window.
   const scaled = nominalTau / Math.max(0.5, 1 + difficulty * 0.35);
   const jitter = rng.nextRange(0.85, 1.2);
-  return { tauSeconds: scaled * jitter, tauJitter: jitter };
+  return {
+    tauSeconds: scaled * jitter,
+    tauJitter: jitter,
+    washMinSeconds: wash?.dwellMinSeconds ?? DEFAULT_WASH_WINDOW.min,
+    washMaxSeconds: wash?.dwellMaxSeconds ?? DEFAULT_WASH_WINDOW.max,
+    procedure: procedure ?? null,
+  };
 };
 
 export const createSilicideEtch = (
   recipe: SilicideRecipe,
 ): ReworkMinigame<SilicideEtchState, SilicideAction> => {
+  const washMin = recipe.washMinSeconds ?? DEFAULT_WASH_WINDOW.min;
+  const washMax = recipe.washMaxSeconds ?? DEFAULT_WASH_WINDOW.max;
+
   const state: SilicideEtchState = {
     elapsedSeconds: 0,
     tauSeconds: recipe.tauSeconds,
     washSeconds: 0,
+    washMinSeconds: washMin,
+    washMaxSeconds: washMax,
     washing: false,
     contactNm: PROCESS.silicide.contactThicknessNm,
     reading: {
@@ -258,9 +290,9 @@ export const createSilicideEtch = (
         }
 
         // Enough time in C49 to strip the stringer, but not so much that the
-        // contact is eaten. Both bounds come from the process window.
-        const minWash = 0.35;
-        const maxWash = 2.2;
+        // contact is eaten. Both bounds come from the authored recipe window.
+        const minWash = washMin;
+        const maxWash = washMax;
 
         if (state.washSeconds < minWash) {
           resolve({

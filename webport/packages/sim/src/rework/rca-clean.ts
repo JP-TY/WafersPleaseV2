@@ -42,8 +42,11 @@ export interface RcaStep {
   readonly targetC: { min: number; nominal: number; max: number };
   /** Real minutes, for player-facing material. */
   readonly realDwellMinutes: { min: number; nominal: number; max: number };
-  /** Game seconds. */
+  /** Nominal dwell, game seconds. */
   readonly dwellSeconds: number;
+  /** Inclusive dwell window the readout paints as the pass band. */
+  readonly dwellMinSeconds: number;
+  readonly dwellMaxSeconds: number;
 }
 
 export interface RcaBath {
@@ -91,6 +94,8 @@ const BUILTIN_STEPS: readonly RcaStep[] = [
     targetC: PROCESS.rca.sc1.target,
     realDwellMinutes: { min: 10, nominal: 10, max: 15 },
     dwellSeconds: PROCESS.rca.sc1.dwellSeconds.nominal,
+    dwellMinSeconds: PROCESS.rca.sc1.dwellSeconds.min,
+    dwellMaxSeconds: PROCESS.rca.sc1.dwellSeconds.max,
   },
   {
     kind: 'QDR1',
@@ -100,6 +105,8 @@ const BUILTIN_STEPS: readonly RcaStep[] = [
     targetC: PROCESS.rca.qdr.target,
     realDwellMinutes: { min: 2, nominal: 5, max: 5 },
     dwellSeconds: PROCESS.rca.qdr.dwellSeconds.nominal,
+    dwellMinSeconds: PROCESS.rca.qdr.dwellSeconds.min,
+    dwellMaxSeconds: PROCESS.rca.qdr.dwellSeconds.max,
   },
   {
     kind: 'SC2',
@@ -109,6 +116,8 @@ const BUILTIN_STEPS: readonly RcaStep[] = [
     targetC: PROCESS.rca.sc2.target,
     realDwellMinutes: { min: 10, nominal: 10, max: 12 },
     dwellSeconds: PROCESS.rca.sc2.dwellSeconds.nominal,
+    dwellMinSeconds: PROCESS.rca.sc2.dwellSeconds.min,
+    dwellMaxSeconds: PROCESS.rca.sc2.dwellSeconds.max,
   },
   {
     kind: 'QDR2',
@@ -118,6 +127,8 @@ const BUILTIN_STEPS: readonly RcaStep[] = [
     targetC: PROCESS.rca.qdr.target,
     realDwellMinutes: { min: 2, nominal: 5, max: 5 },
     dwellSeconds: PROCESS.rca.qdr.dwellSeconds.nominal,
+    dwellMinSeconds: PROCESS.rca.qdr.dwellSeconds.min,
+    dwellMaxSeconds: PROCESS.rca.qdr.dwellSeconds.max,
   },
 ];
 
@@ -140,8 +151,34 @@ export function buildRcaSteps(recipe?: Recipe): readonly RcaStep[] {
     targetC: s.targetC,
     realDwellMinutes: s.realDwellMinutes,
     dwellSeconds: s.dwellSeconds,
+    dwellMinSeconds: s.dwellMinSeconds,
+    dwellMaxSeconds: s.dwellMaxSeconds,
   }));
 }
+
+/**
+ * Live withdraw cue for the bench readout.
+ *
+ * Derived from the same removal/damage functions the verdict uses, so "WITHDRAW
+ * NOW" on the screen cannot disagree with what raise-and-grade will decide.
+ */
+export type RcaWithdrawCue = 'heat' | 'immerse' | 'soak' | 'withdraw' | 'oversoak' | 'done';
+
+export const rcaWithdrawCue = (s: RcaCleanState): RcaWithdrawCue => {
+  if (s.finished) return 'done';
+  if (!s.immersed) {
+    if (s.step.kind === 'SC1' || s.step.kind === 'SC2') {
+      const bath = s.step.kind === 'SC1' ? s.baths.sc1 : s.baths.sc2;
+      if (bath.temperatureC < s.step.targetC.min) return 'heat';
+    }
+    return 'immerse';
+  }
+  const removal = rcaRemovalFraction(s);
+  const damage = rcaSubstrateDamage(s);
+  if (damage > PROCESS.rca.damageLimit * 0.55) return 'oversoak';
+  if (removal >= PROCESS.rca.removalTarget) return 'withdraw';
+  return 'soak';
+};
 
 /**
  * Integrated chemical exposure for the current step.

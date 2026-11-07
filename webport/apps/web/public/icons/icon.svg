@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Wafers Please">
+  <rect width="128" height="128" fill="#0d1520"/>
+  <circle cx="64" cy="64" r="38" fill="none" stroke="#3db88c" stroke-width="6"/>
+  <circle cx="64" cy="64" r="22" fill="#1a4030" stroke="#7fd9b0" stroke-width="3"/>
+  <circle cx="64" cy="64" r="6" fill="#d8ffe8"/>
+</svg>

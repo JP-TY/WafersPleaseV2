@@ -31,6 +31,12 @@
           "correctAction": "Reject",
           "ruleText": "STI center-line seam means sub-surface fill failure and inter-device leakage. Cannot be chemically extracted: REJECT / SCRAP.",
           "toleranceThreshold": 0.15
+        },
+        {
+          "defect": "substrate-contamination",
+          "correctAction": "Rework",
+          "ruleText": "Resistance spike with organic signature is trace contamination. The wet bench strips it completely: REWORK (RCA clean).",
+          "toleranceThreshold": 0.15
         }
       ]
     },

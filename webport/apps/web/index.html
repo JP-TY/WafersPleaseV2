@@ -1,14 +1,23 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Wafers Please — Rework Bay</title>
-</head>
-<body>
-  <canvas id="stage"></canvas>
-  <div id="title">WAFERS PLEASE<small>rework bay · 45 nm</small></div>
-  <div id="hud"></div>
-  <script type="module" src="/src/main.ts"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0d1520" />
+    <meta name="description" content="Wafers Please — training-first wafer disposition in a diegetic cleanroom." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <title>Wafers Please</title>
+    <link rel="stylesheet" href="/src/index.css" />
+  </head>
+  <body>
+    <canvas id="stage" tabindex="0" aria-label="Cleanroom inspection bay"></canvas>
+    <div id="hud" class="hud" aria-live="polite">
+      <span id="hud-phase">Briefing</span>
+      <span id="hud-salary">$0</span>
+      <span id="hud-wafer">—</span>
+      <span id="hud-hint">Click BEGIN SHIFT on the briefing board</span>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
 </html>

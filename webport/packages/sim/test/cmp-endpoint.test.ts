@@ -6,6 +6,8 @@ import {
   reflectanceAt,
   thicknessScaleFor,
   apparentEndpointSeconds,
+  apparentRemainingNm,
+  trueRemainingAt,
   sample,
   rollCmpInstrument,
   CMP_GAIN_RANGE,
@@ -134,6 +136,29 @@ describe('instrument calibration produces real metrology error', () => {
   it('apparent endpoint equals the truth when calibrated to reference', () => {
     const g = perfectlyCalibrated();
     expect(apparentEndpointSeconds(st(g))).toBeCloseTo(g.state.true_.endpointSeconds, 6);
+  });
+
+  it('trueRemainingAt reconstructs the polish from stored overburden and rate', () => {
+    const g = make(3);
+    const t = g.state.true_;
+    expect(trueRemainingAt(0, t.initialOverburdenNm, t.removalRateNmPerSecond)).toBeCloseTo(
+      t.initialOverburdenNm,
+      6,
+    );
+    expect(trueRemainingAt(t.endpointSeconds, t.initialOverburdenNm, t.removalRateNmPerSecond)).toBeCloseTo(
+      t.endpointNm,
+      5,
+    );
+  });
+
+  it('apparentRemainingNm matches sample() under the same calibration', () => {
+    const g = perfectlyCalibrated();
+    g.act({ type: 'setWavelength', value: 8 });
+    for (let i = 0; i < 30; i++) g.tick(DT);
+    const s = st(g);
+    const fromSample = sample(s).apparentNm;
+    const fromHelper = apparentRemainingNm(s.true_.remainingNm, s.calibration, s.true_.elapsedSeconds);
+    expect(fromHelper).toBeCloseTo(fromSample, 10);
   });
 });
 

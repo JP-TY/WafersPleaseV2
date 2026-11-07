@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { Rng } from '../src/rng.js';
-import { createRcaClean, RCA_STEPS } from '../src/rework/rca-clean.js';
+import {
+  createRcaClean,
+  RCA_STEPS,
+  rcaRemovalFraction,
+  rcaWithdrawCue,
+} from '../src/rework/rca-clean.js';
 import { PROCESS, realMinutes, stepBathTemperature, arrheniusRatio } from '../src/rework/process.js';
 import type { RcaCleanState } from '../src/rework/rca-clean.js';
 
@@ -210,6 +215,38 @@ describe('input validation', () => {
     const before = { ...s(g) };
     g.tick(10);
     expect(s(g).dwellSeconds).toBe(before.dwellSeconds);
+  });
+});
+
+describe('withdraw cue (presentation + grade share one answer)', () => {
+  it('asks to heat while SC-1 is cold', () => {
+    const g = fresh();
+    expect(rcaWithdrawCue(s(g))).toBe('heat');
+  });
+
+  it('asks to immerse once the bath is in window', () => {
+    const g = fresh();
+    g.act({ type: 'setHeater', bath: 'sc1', setpointC: 75 });
+    for (let i = 0; i < 60 * 60 && s(g).baths.sc1.temperatureC < 70; i++) g.tick(1 / 60);
+    expect(rcaWithdrawCue(s(g))).toBe('immerse');
+  });
+
+  it('asks to withdraw once removal hits the graded target', () => {
+    const g = fresh();
+    g.act({ type: 'setHeater', bath: 'sc1', setpointC: 75 });
+    for (let i = 0; i < 60 * 60 && s(g).baths.sc1.temperatureC < 74; i++) g.tick(1 / 60);
+    g.act({ type: 'immerse' });
+    for (let t = 0; t < 30 && rcaRemovalFraction(s(g)) < PROCESS.rca.removalTarget; t += 1 / 60) {
+      g.tick(1 / 60);
+    }
+    expect(rcaRemovalFraction(s(g))).toBeGreaterThanOrEqual(PROCESS.rca.removalTarget);
+    expect(rcaWithdrawCue(s(g))).toBe('withdraw');
+  });
+
+  it('carries dwellMin/Max from the step table onto state', () => {
+    const g = fresh();
+    expect(s(g).step.dwellMinSeconds).toBe(PROCESS.rca.sc1.dwellSeconds.min);
+    expect(s(g).step.dwellMaxSeconds).toBe(PROCESS.rca.sc1.dwellSeconds.max);
   });
 });
 

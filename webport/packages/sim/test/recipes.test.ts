@@ -13,6 +13,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { recipeFor, recipeForDefect, CMP_BRAKE_WAFERS, BUILTIN_RECIPES } from '../src/rework/recipes.js';
 import { buildRcaSteps, createRcaClean, RCA_STEPS } from '../src/rework/rca-clean.js';
+import { createSilicideEtch, rollSilicideRecipe } from '../src/rework/silicide-etch.js';
+import { createCmpEndpoint } from '../src/rework/cmp-endpoint.js';
 import { Rng } from '../src/rng.js';
 import { validateBundle, type ConfigBundle, type ReworkConfig } from '@wafers/data';
 
@@ -120,6 +122,69 @@ describe('the RCA step table is built from config', () => {
     ];
     const sim = createRcaClean(new Rng(1), 0, recipeFor('RCAClean', hot));
     expect(sim.state.step.targetC.nominal).toBe(99);
+  });
+});
+
+describe('silicide and CMP consume authored recipes', () => {
+  it('silicide wash windows come from the WASH step, not hardcoded constants', () => {
+    const recipe = recipeFor('SilicideWetEtch', REWORK);
+    const wash = recipe.steps.find((s) => s.key === 'WASH')!;
+    const rolled = rollSilicideRecipe(new Rng(1), 0, recipe);
+    expect(rolled.washMinSeconds).toBe(wash.dwellMinSeconds);
+    expect(rolled.washMaxSeconds).toBe(wash.dwellMaxSeconds);
+    expect(rolled.procedure?.instructions).toBe(recipe.instructions);
+
+    // A mutated window must change what commit grades.
+    const mutated: ReworkConfig[] = [
+      {
+        ...REWORK.find((c) => c.type === 'SilicideWetEtch')!,
+        steps: recipe.steps.map((s) =>
+          s.key === 'WASH'
+            ? {
+                ...REWORK.find((c) => c.type === 'SilicideWetEtch')!.steps.find((x) => x.key === 'WASH')!,
+                dwellSeconds: { min: 0.1, nominal: 0.2, max: 0.25 },
+              }
+            : REWORK.find((c) => c.type === 'SilicideWetEtch')!.steps.find((x) => x.key === s.key)!,
+        ),
+      },
+    ];
+    const tight = rollSilicideRecipe(new Rng(1), 0, recipeFor('SilicideWetEtch', mutated));
+    expect(tight.washMaxSeconds).toBe(0.25);
+    const g = createSilicideEtch(tight);
+    g.act({ type: 'startWash' });
+    for (let t = 0; t < 0.5; t += 1 / 60) g.tick(1 / 60);
+    g.act({ type: 'stopWash' });
+    g.act({ type: 'commit' });
+    expect(g.result?.success).toBe(false);
+    expect(g.result?.detail).toMatch(/contact|wash/i);
+  });
+
+  it('CMP time limit, tolerance and brake wafers come from the recipe', () => {
+    const recipe = recipeFor('CMPCalibration', REWORK);
+    const sim = createCmpEndpoint(new Rng(1), 0, recipe);
+    expect(sim.state.timeLimitSeconds).toBe(recipe.nominalSeconds * 2);
+    expect(sim.state.toleranceSeconds).toBe(recipe.toleranceSeconds);
+    expect(sim.state.brakeWafers).toBe(CMP_BRAKE_WAFERS);
+
+    const mutated: ReworkConfig[] = [
+      {
+        ...REWORK.find((c) => c.type === 'CMPCalibration')!,
+        idealTimingSeconds: 12,
+        toleranceWindowSeconds: 9,
+      },
+    ];
+    const other = createCmpEndpoint(new Rng(1), 0, recipeFor('CMPCalibration', mutated));
+    expect(other.state.timeLimitSeconds).toBe(24);
+    expect(other.state.toleranceSeconds).toBe(9);
+  });
+
+  it('silicide failure modes remain reachable under the authored wash window', () => {
+    const recipe = recipeFor('SilicideWetEtch', REWORK);
+    const g = createSilicideEtch(rollSilicideRecipe(new Rng(7), 0, recipe));
+    // No wash → out of spec.
+    g.act({ type: 'commit' });
+    expect(g.result?.success).toBe(false);
+    expect(g.result?.irreversible).toBe(false);
   });
 });
 
