@@ -52,7 +52,8 @@ export class FollowCamera {
         cur.z + (this.target.z - cur.z) * k,
       ),
     );
-    camera.radius += (this.radius - camera.radius) * k;
+    // Adopt user zoom instead of fighting the wheel every frame.
+    this.radius = camera.radius;
     // Preserve player orbit; alpha/beta only tracked for resync.
     void this.alpha;
     void this.beta;

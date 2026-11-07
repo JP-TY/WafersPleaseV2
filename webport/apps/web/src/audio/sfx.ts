@@ -40,7 +40,9 @@ export function installAudio(): AudioApi {
     typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const ensure = (): AudioContext | null => {
-    if (muted || reduceMotion) return null;
+    // Gate on unlock so construction-time phase cues cannot create an AudioContext
+    // before a user gesture (autoplay policy / lazy-unlock contract).
+    if (!unlocked || muted || reduceMotion) return null;
     if (!ctx) {
       const AC = globalThis.AudioContext ?? (globalThis as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AC) return null;

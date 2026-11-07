@@ -1,5 +1,5 @@
-/* Wafers Please — minimal offline shell. App shell only; models stay network-first. */
-const CACHE = 'wafers-please-shell-v1';
+/* Wafers Please — minimal offline shell. Navigations are network-first; hashed assets stay cache-first. */
+const CACHE = 'wafers-please-shell-v2';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -26,13 +26,32 @@ self.addEventListener('fetch', (event) => {
   }
   if (event.request.method !== 'GET') return;
 
+  const isNavigation =
+    event.request.mode === 'navigate' ||
+    url.pathname === '/' ||
+    url.pathname === '/index.html';
+
+  if (isNavigation) {
+    // Network-first so returning users pick up new HTML/asset hashes.
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          const copy = res.clone();
+          if (res.ok) caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+          return res;
+        })
+        .catch(() => caches.match(event.request).then((hit) => hit || caches.match('/index.html'))),
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((hit) => {
       if (hit) return hit;
       return fetch(event.request)
         .then((res) => {
           const copy = res.clone();
-          if (res.ok && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.pathname === '/')) {
+          if (res.ok && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css'))) {
             caches.open(CACHE).then((cache) => cache.put(event.request, copy));
           }
           return res;

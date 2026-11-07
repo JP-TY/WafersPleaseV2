@@ -115,9 +115,10 @@ export function frameWorkspace(
 
 /** Pull in on the briefing board so BEGIN SHIFT is the first readable CTA. */
 export function frameBriefing(camera: ArcRotateCamera): void {
-  frameWorkspace(camera, new Vector3(-0.1, 1.55, 0.2), 2.05);
-  camera.alpha = -Math.PI / 2 + 0.4;
-  camera.beta = 1.05;
+  // Stay under the FFU bank (cam.y ≲ 1.9) so BEGIN SHIFT is not occluded by HEPA frames.
+  frameWorkspace(camera, new Vector3(-0.1, 1.35, 0.15), 2.15);
+  camera.alpha = -Math.PI / 2 + 0.35;
+  camera.beta = 1.25;
   camera.fov = 0.95;
   camera.getViewMatrix();
 }

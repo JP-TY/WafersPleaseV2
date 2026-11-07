@@ -139,7 +139,8 @@ export class ShiftLedger {
   metrics(): CompetencyMetrics {
     const rs = this.records;
     const total = rs.length;
-    const safeDiv = (a: number, b: number) => (b === 0 ? 1 : a / b);
+    // Success ratios default to 1 when empty; failure rates must default to 0.
+    const safeDiv = (a: number, b: number, empty = 1) => (b === 0 ? empty : a / b);
 
     const correct = rs.filter((r) => r.result.outcome === 'Correct').length;
     const falseAccepts = rs.filter((r) => r.result.outcome === 'FalseAccept').length;
@@ -154,7 +155,7 @@ export class ShiftLedger {
 
     // Killer defects presented = wafers that had any Catastrophic defect.
     const killerPresented = rs.filter((r) => r.defectClasses.includes('Catastrophic')).length;
-    const killerFalseAcceptRate = safeDiv(killerFalseAccepts, killerPresented);
+    const killerFalseAcceptRate = safeDiv(killerFalseAccepts, killerPresented, 0);
 
     // Failure-mode identification (GDD §3): did the player correctly treat
     // catastrophic defects as catastrophic, and parametric defects as merely
@@ -377,7 +378,13 @@ function buildTeachingNotes(ctx: DebriefTeachingContext): string[] {
   const notes: string[] = [];
   for (const rec of ctx.records) {
     if (rec.result.outcome === 'Correct') continue;
-    const defectId = rec.result.defectTypes[0] ? defectTypeToId(rec.result.defectTypes[0]) : null;
+    // Prefer the defect whose rule matches the wafer's correct action (compound wafers).
+    const ids = rec.result.defectTypes.map(defectTypeToId);
+    const defectId =
+      ids.find((id) => {
+        const rule = ctx.ruleMatrix.rules.find((r) => r.defect === id);
+        return rule?.correctAction === rec.correctAction;
+      }) ?? ids[0] ?? null;
     const rule = defectId ? ctx.ruleMatrix.rules.find((r) => r.defect === defectId) : undefined;
     const ruleBit = rule?.ruleText?.trim() ? ` Rule: ${rule.ruleText}` : '';
     const defectBit = defectId ? ` Defect ${defectId}.` : ' Clean wafer.';

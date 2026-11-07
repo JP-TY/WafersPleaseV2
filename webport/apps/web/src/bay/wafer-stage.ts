@@ -159,8 +159,11 @@ export class WaferStage {
 
   /** Mouse-drag tilt under cross-lighting (GDD §4 desktop). */
   nudgeTilt(dx: number, dy: number): void {
-    this.tiltZ = Math.max(-0.45, Math.min(0.45, this.tiltZ + dx * 0.004));
-    this.tiltX = Math.max(-0.45, Math.min(0.45, this.tiltX + dy * 0.004));
+    // Center the clamp on the authored rest pitch so the first drag does not snap.
+    const restX = 0.62;
+    const maxDelta = 0.45;
+    this.tiltZ = Math.max(-maxDelta, Math.min(maxDelta, this.tiltZ + dx * 0.004));
+    this.tiltX = Math.max(restX - maxDelta, Math.min(restX + maxDelta, this.tiltX + dy * 0.004));
     this.wafer.rotation.x = this.tiltX;
     this.wafer.rotation.z = this.tiltZ;
   }

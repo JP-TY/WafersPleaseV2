@@ -203,10 +203,16 @@ export function ensureReworkableWafer(
   const reworkProfiles = pool.filter((d) => d.defaultAction === 'Rework');
   if (reworkProfiles.length === 0) return lot;
 
-  const hasRework = lot.wafers.some((w) =>
-    w.latentDefects.some((d) => reworkProfiles.some((p) => p.defectType === d.defectType)),
-  );
-  if (hasRework) return lot;
+  const actionOf = (defectType: string): string =>
+    pool.find((p) => p.defectType === defectType)?.defaultAction ?? 'Reject';
+
+  /** Wafer-level disposition is Rework only when Rework is present and Reject is not. */
+  const isReworkDisposition = (w: LatentWafer): boolean => {
+    const actions = w.latentDefects.map((d) => actionOf(d.defectType));
+    return actions.includes('Rework') && !actions.includes('Reject');
+  };
+
+  if (lot.wafers.some(isReworkDisposition)) return lot;
 
   const profile = reworkProfiles[0]!;
   const layer = DEFECT_ROUTING[profile.defectType];
@@ -224,17 +230,9 @@ export function ensureReworkableWafer(
 
   const wafers = lot.wafers.map((w, i) => {
     if (i !== targetIdx) return w;
-    // Drop prior defects that belong to another routing step — rewriting the
-    // wafer's layer while leaving a HighK defect on a Substrate wafer (or the
-    // reverse) breaks the routing invariant the generator guarantees.
-    const kept = w.latentDefects.filter((d) => DEFECT_ROUTING[d.defectType] === layer);
-    const latentDefects =
-      kept.length === 0
-        ? [injected]
-        : kept.some((d) => d.defectType === injected.defectType)
-          ? kept
-          : [injected, ...kept.slice(0, Math.max(0, MAX_DEFECT_SLOTS - 1))];
-    return { ...w, routingStep: layer, latentDefects };
+    // Replace with a single Rework defect so conflicting Reject defects cannot
+    // escalate the wafer-level disposition away from the bench.
+    return { ...w, routingStep: layer, latentDefects: [injected] };
   });
 
   return { wafers };

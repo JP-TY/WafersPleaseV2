@@ -72,6 +72,7 @@ export class QuizBoard {
   readonly root: TransformNode;
   readonly choiceButtons: AbstractMesh[] = [];
   private tex: DynamicTexture;
+  private choiceTextures: DynamicTexture[] = [];
   private questions: readonly QuizQuestion[] = [];
   private index = 0;
   private correct = 0;
@@ -102,15 +103,17 @@ export class QuizBoard {
       btn.material = matte(scene, `quizChoiceMat${i}`, COLORS.accent, 0.25);
       btn.isPickable = true;
       btn.metadata = { interact: 'quizChoice', choice: i };
-      applyLabel(btn, scene, {
-        width: 512,
-        height: 48,
-        fill: '#143028',
-        ink: '#dfffee',
-        font: 'bold 16px monospace',
-        lines: [`${i + 1}.`],
-        lineHeight: 22,
-      });
+      this.choiceTextures.push(
+        applyLabel(btn, scene, {
+          width: 512,
+          height: 48,
+          fill: '#143028',
+          ink: '#dfffee',
+          font: 'bold 16px monospace',
+          lines: [`${i + 1}.`],
+          lineHeight: 22,
+        }),
+      );
       this.choiceButtons.push(btn);
     }
   }
@@ -178,7 +181,7 @@ export class QuizBoard {
     for (let i = 0; i < this.choiceButtons.length; i++) {
       const btn = this.choiceButtons[i]!;
       btn.setEnabled(true);
-      applyLabel(btn, btn.getScene(), {
+      rewriteLabel(this.choiceTextures[i]!, {
         width: 512,
         height: 48,
         fill: '#143028',
