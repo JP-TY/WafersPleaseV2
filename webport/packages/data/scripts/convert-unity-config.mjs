@@ -313,6 +313,17 @@ async function main() {
     }
   }
 
+  // Abort before any write so a failed conversion preserves the last usable bundle.
+  if (problems.length) {
+    console.error(`\n${problems.length} problem(s) — config not written:`);
+    for (const p of problems) console.error(`  x ${p}`);
+    if (warnings.length) {
+      console.error(`\n${warnings.length} authoring warning(s):`);
+      for (const w of warnings) console.error(`  ! ${w}`);
+    }
+    process.exit(1);
+  }
+
   // ---- emit ---------------------------------------------------------------
   const out = {
     'defects.json': { defects: buckets.DefectProfileSO },
@@ -353,11 +364,6 @@ async function main() {
   if (warnings.length) {
     console.log(`\n${warnings.length} authoring warning(s):`);
     for (const w of warnings) console.log(`  ! ${w}`);
-  }
-  if (problems.length) {
-    console.error(`\n${problems.length} problem(s):`);
-    for (const p of problems) console.error(`  x ${p}`);
-    process.exitCode = 1;
   }
 }
 
