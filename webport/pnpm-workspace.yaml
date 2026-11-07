@@ -1,0 +1,13 @@
+# Web port workspace.
+#
+# NOTE: this lives under webport/ rather than a top-level packages/ because the
+# Unity project already owns a top-level Packages/ (capital P) holding
+# manifest.json and packages-lock.json. On Linux those are distinct directories,
+# but git's index is case-insensitive here and staged new files as
+# Packages/content/ -- which on a case-sensitive checkout would land inside
+# Unity's package directory and make Unity try to interpret content/ as a
+# package. Keeping the port under webport/ removes the collision entirely rather
+# than depending on git config to disambiguate.
+packages:
+  - 'packages/*'
+  - 'apps/*'

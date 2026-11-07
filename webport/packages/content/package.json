@@ -1,0 +1,17 @@
+{
+  "name": "@wafers/content",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Authored game content: optimized glTF props and JSON game configuration",
+  "scripts": {
+    "assets:build": "node scripts/build-assets.mjs",
+    "assets:budget": "node scripts/check-asset-budget.mjs"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "^4.2.1",
+    "@gltf-transform/core": "^4.2.1",
+    "@gltf-transform/extensions": "^4.2.1",
+    "@gltf-transform/functions": "^4.2.1"
+  }
+}
