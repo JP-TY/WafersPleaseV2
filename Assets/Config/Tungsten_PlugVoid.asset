@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3f985818f1aba93b8a9895c077a4e54f, type: 3}
+  m_Name: Tungsten_PlugVoid
+  m_EditorClassIdentifier: Assembly-CSharp::WafersPlease.Config.DefectProfileSO
+  displayName: Tungsten Plug Void
+  defectClass: 1
+  defectType: 4
+  detectionDifficulty: 2
+  requiredTool: 3
+  defaultAction: 1
+  reworkAction: 2
+  severity: 0.95
+  toleranceThreshold: 0.15
+  diagnosticIndicators:
+  - Internal keyhole void in vertical plug
+  - Disconnected via core
+  - Open circuit across metallization
+  glossaryEntry: 'Keyhole voids inside tungsten onramp plugs break backend metallization
+    continuity. Catastrophic and uncorrectable post-deposition: reject.'
+  remediationReferences:
+  - GDD Section 6 - Back-End Copper Damascene and Plugs

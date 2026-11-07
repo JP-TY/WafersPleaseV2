@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3f985818f1aba93b8a9895c077a4e54f, type: 3}
+  m_Name: Bowing_Warping
+  m_EditorClassIdentifier: Assembly-CSharp::WafersPlease.Config.DefectProfileSO
+  displayName: Bowing && Warping
+  defectClass: 1
+  defectType: 0
+  detectionDifficulty: 0
+  requiredTool: 0
+  defaultAction: 1
+  reworkAction: 2
+  severity: 0.85
+  toleranceThreshold: 0.15
+  diagnosticIndicators:
+  - Surface topographic distortion lines
+  - Out-of-range flatness spec
+  - High-NA lithography focus risk
+  glossaryEntry: 'Substrate bow and warp bend the single-crystal wafer beyond high-NA
+    lithography depth-of-focus, blurring all downstream patterning. Irreversible structural
+    deformation: reject the wafer.'
+  remediationReferences:
+  - GDD Section 6 - Substrate Preparation and Geometric Integrity

@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3f985818f1aba93b8a9895c077a4e54f, type: 3}
+  m_Name: Substrate_Contamination
+  m_EditorClassIdentifier: Assembly-CSharp::WafersPlease.Config.DefectProfileSO
+  displayName: Substrate Contamination
+  defectClass: 0
+  defectType: 5
+  detectionDifficulty: 0
+  requiredTool: 4
+  defaultAction: 2
+  reworkAction: 2
+  severity: 0.5
+  toleranceThreshold: 0.15
+  diagnosticIndicators:
+  - Local sheet-resistance spike
+  - Organic film absorption signature
+  - Threshold voltage fluctuation
+  glossaryEntry: 'Trace organic or metallic films shift threshold voltage across CMOS
+    pairs. Fully cleanable at the standard wet chemical bench: rework (RCA clean).'
+  remediationReferences:
+  - GDD Section 6 - Substrate Preparation and Geometric Integrity
+  - GDD Section 8A - RCA-Clean Sequence

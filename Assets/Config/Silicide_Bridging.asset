@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3f985818f1aba93b8a9895c077a4e54f, type: 3}
+  m_Name: Silicide_Bridging
+  m_EditorClassIdentifier: Assembly-CSharp::WafersPlease.Config.DefectProfileSO
+  displayName: Silicide Bridging
+  defectClass: 1
+  defectType: 3
+  detectionDifficulty: 2
+  requiredTool: 3
+  defaultAction: 2
+  reworkAction: 2
+  severity: 0.9
+  toleranceThreshold: 0.15
+  diagnosticIndicators:
+  - Bright conductive stringer over spacer
+  - Gate to source/drain short path
+  - Unreacted C49-phase metal residue
+  glossaryEntry: 'Stray titanium stringers bridge gate to source/drain contacts. Caught
+    early, a selective ultrasonic wet etch strips the C49-phase residue: rework.'
+  remediationReferences:
+  - GDD Section 6 - Strain Engineering and Silicides
+  - GDD Section 8B - Selective Silicide Wet Etch
