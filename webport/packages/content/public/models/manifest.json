@@ -1,18 +1,31 @@
 {
-  "generatedBy": "packages/content/scripts/build-assets.mjs",
-  "budgetTotal": 4194304,
+  "generatedBy": "packages/content/scripts/embed-reauthored.mjs",
+  "source": "Assets/Models + textures/* reauthor",
+  "geometry": "meshopt",
+  "textures": {
+    "format": "webp",
+    "maxSize": 1024,
+    "albedo": "mesh-bake(Foup-silhouette)",
+    "orm": "authored",
+    "meshSrc": ".tmp-reauthor/Foup.glb"
+  },
+  "budget": {
+    "total": 4194304,
+    "single": 1048576
+  },
+  "totalBytes": 3434280,
   "props": [
     {
       "name": "Console",
-      "bytes": 354712
+      "bytes": 472992
     },
     {
       "name": "DataSlate",
-      "bytes": 283988
+      "bytes": 389780
     },
     {
       "name": "Foup",
-      "bytes": 570892
+      "bytes": 345028
     },
     {
       "name": "IncidentReport",
@@ -20,7 +33,7 @@
     },
     {
       "name": "Inspection",
-      "bytes": 347672
+      "bytes": 470996
     },
     {
       "name": "Room",
@@ -33,6 +46,13 @@
     {
       "name": "Workbench",
       "bytes": 461592
+    }
+  ],
+  "reauthored": [
+    {
+      "name": "Foup",
+      "before": 351544,
+      "after": 345028
     }
   ]
 }

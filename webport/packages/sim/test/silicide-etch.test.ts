@@ -14,7 +14,13 @@ import { PROCESS } from '../src/rework/process.js';
 const DT = 1 / 60;
 
 function make(tau = 20) {
-  return createSilicideEtch({ tauSeconds: tau, tauJitter: 1 });
+  return createSilicideEtch({
+    tauSeconds: tau,
+    tauJitter: 1,
+    washMinSeconds: 0.35,
+    washMaxSeconds: 2.2,
+    procedure: null,
+  });
 }
 const st = (g: ReturnType<typeof make>): SilicideEtchState => g.state;
 
@@ -22,6 +28,21 @@ const st = (g: ReturnType<typeof make>): SilicideEtchState => g.state;
 function anneal(g: ReturnType<typeof make>, seconds: number) {
   for (let t = 0; t < seconds; t += DT) g.tick(DT);
 }
+
+describe('wash window on state', () => {
+  it('exposes the recipe wash bounds the commit grades against', () => {
+    const g = make();
+    expect(st(g).washMinSeconds).toBe(0.35);
+    expect(st(g).washMaxSeconds).toBe(2.2);
+  });
+
+  it('carries authored wash bounds from rollSilicideRecipe', () => {
+    const recipe = rollSilicideRecipe(new Rng(9), 0);
+    const g = createSilicideEtch(recipe);
+    expect(g.state.washMinSeconds).toBe(recipe.washMinSeconds);
+    expect(g.state.washMaxSeconds).toBe(recipe.washMaxSeconds);
+  });
+});
 
 describe('C49 -> C54 kinetics', () => {
   it('starts unconverted', () => {

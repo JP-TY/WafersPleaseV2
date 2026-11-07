@@ -14,8 +14,8 @@
  * Latency_By_Layer), and folds them into the §10 weighted Competency_Score.
  */
 
-import type { ActionPath } from '@wafers/data';
-import type { DispositionResult } from '../evaluation/disposition.js';
+import type { ActionPath, RuleMatrix } from '@wafers/data';
+import { defectTypeToId, type DispositionResult } from '../evaluation/disposition.js';
 import type { CompetencyInputs } from '../evaluation/scoring.js';
 import { competencyScore, normalizeCompetencyTarget } from '../evaluation/scoring.js';
 import type { ProcessLayer } from '../generation/wafer.js';
@@ -229,6 +229,16 @@ export interface DebriefReport {
   readonly competencyScore: number;
   readonly salaryTotal: number;
   readonly passed: boolean;
+  /**
+   * Per-miss teaching lines: defect, rule, correct call, what the player did,
+   * and the cost. Empty when every stamp was correct.
+   */
+  readonly teachingNotes: readonly string[];
+}
+
+export interface DebriefTeachingContext {
+  readonly records: readonly WaferRecord[];
+  readonly ruleMatrix: RuleMatrix;
 }
 
 const TARGETS = {
@@ -244,9 +254,15 @@ const TARGETS = {
  * Each tracked competency is a line with value / target / pass and a note in
  * the GDD's diagnostic language. The headline names the dominant failure mode.
  */
-export function buildDebrief(m: CompetencyMetrics, salaryTarget: number, competencyTarget: number): DebriefReport {
+export function buildDebrief(
+  m: CompetencyMetrics,
+  salaryTarget: number,
+  competencyTarget: number,
+  teaching?: DebriefTeachingContext,
+): DebriefReport {
   const lines: DebriefLine[] = [];
   const t = m.totals;
+  const teachingNotes = teaching ? buildTeachingNotes(teaching) : [];
 
   lines.push({
     competency: 'Disposition Accuracy',
@@ -352,5 +368,26 @@ export function buildDebrief(m: CompetencyMetrics, salaryTarget: number, compete
     competencyScore: m.competencyScore,
     salaryTotal: t.salaryTotal,
     passed,
+    teachingNotes,
   };
+}
+
+/** One teaching note per incorrect stamp, citing the authored rule text. */
+function buildTeachingNotes(ctx: DebriefTeachingContext): string[] {
+  const notes: string[] = [];
+  for (const rec of ctx.records) {
+    if (rec.result.outcome === 'Correct') continue;
+    const defectId = rec.result.defectTypes[0] ? defectTypeToId(rec.result.defectTypes[0]) : null;
+    const rule = defectId ? ctx.ruleMatrix.rules.find((r) => r.defect === defectId) : undefined;
+    const ruleBit = rule?.ruleText?.trim() ? ` Rule: ${rule.ruleText}` : '';
+    const defectBit = defectId ? ` Defect ${defectId}.` : ' Clean wafer.';
+    notes.push(
+      `Wafer ${rec.index + 1}: stamped ${rec.result.playerAction.toUpperCase()}, ` +
+        `correct was ${rec.correctAction.toUpperCase()}.` +
+        defectBit +
+        ruleBit +
+        ` Cost ${rec.salaryDelta >= 0 ? '+' : ''}${rec.salaryDelta} cr.`,
+    );
+  }
+  return notes;
 }

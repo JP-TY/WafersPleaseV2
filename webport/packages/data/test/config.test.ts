@@ -105,13 +105,22 @@ describe('day progression matches the GDD', () => {
   it('is Day 1 substrate, Day 2 gate stack, Day 3 interconnect', () => {
     expect(days.map((d) => d.id)).toEqual(['day-1-training', 'day-2-standard', 'day-3-certification']);
     expect([...at(days, 0, 'day 1').allowedDefects].sort()).toEqual(['bowing-warping', 'substrate-contamination']);
-    expect([...at(days, 1, 'day 2').allowedDefects].sort()).toEqual(['interface-roughness', 'sti-void']);
+    expect([...at(days, 1, 'day 2').allowedDefects].sort()).toEqual([
+      'interface-roughness',
+      'sti-void',
+      'substrate-contamination',
+    ]);
     expect([...at(days, 2, 'day 3').allowedDefects].sort()).toEqual(['silicide-bridging', 'tungsten-plug-void']);
   });
 
   it('grants the tools the GDD lists per day', () => {
     expect([...at(days, 0, 'day 1').availableTools].sort()).toEqual(['FourPointProbe', 'StylusProfilometer']);
-    expect([...at(days, 1, 'day 2').availableTools].sort()).toEqual(['SpectroscopicEllipsometry', 'XRayRefractometry']);
+    expect([...at(days, 1, 'day 2').availableTools].sort()).toEqual([
+      'FourPointProbe',
+      'SpectroscopicEllipsometry',
+      'StylusProfilometer',
+      'XRayRefractometry',
+    ]);
     expect(at(days, 2, 'day 3').availableTools).toEqual(['ElectronMicroscope']);
   });
 

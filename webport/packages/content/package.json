@@ -6,6 +6,10 @@
   "description": "Authored game content: optimized glTF props and JSON game configuration",
   "scripts": {
     "assets:build": "node scripts/build-assets.mjs",
+    "assets:reauthor": "node scripts/extract-source-textures.mjs .tmp-src-tex && python3 scripts/reauthor-textures.py --from-dir .tmp-src-tex --out textures --size 1024 && node scripts/embed-reauthored.mjs",
+    "assets:reauthor:foup": "node scripts/extract-source-textures.mjs .tmp-src-tex && python3 scripts/reauthor-textures.py --from-dir .tmp-src-tex --out textures --size 1024 --props Foup && node scripts/embed-reauthored.mjs --props Foup",
+    "assets:reauthor:foup-mesh": "blender -b -P scripts/reauthor-foup-mesh.py -- --out .tmp-reauthor/Foup.glb --tex-out textures/Foup --size 1024 && node scripts/embed-reauthored.mjs --props Foup --mesh-src=.tmp-reauthor/Foup.glb",
+    "assets:reauthor:foup-pod": "npm run assets:reauthor:foup-mesh",
     "assets:budget": "node scripts/check-asset-budget.mjs"
   },
   "devDependencies": {

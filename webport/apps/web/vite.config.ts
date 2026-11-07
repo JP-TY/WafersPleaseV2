@@ -1,12 +1,12 @@
 import { defineConfig, type Plugin } from 'vite';
-import { copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-
-/** Where the optimized props actually live, relative to apps/web. */
+/** Single source of truth — served via middleware / one-shot dist copy (no watch storms). */
 const MODELS_DIR = path.resolve(HERE, '../../packages/content/public/models');
+const DIST_MODELS = path.resolve(HERE, 'dist/models');
 
 const MIME: Record<string, string> = {
   '.glb': 'model/gltf-binary',
@@ -14,45 +14,62 @@ const MIME: Record<string, string> = {
   '.ktx2': 'image/ktx2',
 };
 
-/**
- * Serve the committed optimized models at /models/*.
- *
- * A symlink from public/models would be simpler, but committing a symlink
- * breaks on Windows checkouts and in archives that do not preserve them. The
- * props are a build input of apps/web rather than its own assets, so serving them
- * from their real location keeps a single copy in the repository.
- */
+function copyModelsOnce(): void {
+  if (!existsSync(MODELS_DIR)) return;
+  mkdirSync(DIST_MODELS, { recursive: true });
+  for (const f of readdirSync(MODELS_DIR)) {
+    const src = path.join(MODELS_DIR, f);
+    const dst = path.join(DIST_MODELS, f);
+    if (!existsSync(src) || !statSync(src).isFile()) continue;
+    // Skip identical copies — avoids GLB copy storms on rebuild loops.
+    if (existsSync(dst)) {
+      const a = statSync(src);
+      const b = statSync(dst);
+      if (a.size === b.size && a.mtimeMs <= b.mtimeMs) continue;
+    }
+    copyFileSync(src, dst);
+  }
+}
+
+/** Static /models alias: stream from packages/content; one-shot dist sync on build close. */
 function serveModels(): Plugin {
   return {
     name: 'wafers-serve-models',
     configureServer(server) {
+      // Never watch multi-MB GLBs — that path caused Vite OOM loops here.
+      server.watcher.unwatch(MODELS_DIR);
       server.middlewares.use((req, res, next) => {
         const url = req.url ?? '';
         if (!url.startsWith('/models/')) return next();
         const file = path.join(MODELS_DIR, path.basename(url.split('?')[0] ?? ''));
-        // basename() already strips traversal, but be explicit about the boundary.
         if (!file.startsWith(MODELS_DIR) || !existsSync(file)) return next();
         res.setHeader('Content-Type', MIME[path.extname(file)] ?? 'application/octet-stream');
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
         createReadStream(file).pipe(res);
       });
     },
-    generateBundle() {
-      // Copy the props into the build output at the same public path.
-      if (!existsSync(MODELS_DIR)) return;
-      mkdirSync(path.resolve(HERE, 'dist/models'), { recursive: true });
-      for (const f of readdirSync(MODELS_DIR)) {
-        copyFileSync(path.join(MODELS_DIR, f), path.resolve(HERE, 'dist/models', f));
-      }
+    closeBundle() {
+      copyModelsOnce();
     },
   };
 }
 
 export default defineConfig({
   plugins: [serveModels()],
-  server: { host: '127.0.0.1', port: 5180 },
+  // Prefer 5181 — 5180 has been unreliable under OOM kills in this workspace.
+  server: {
+    host: '127.0.0.1',
+    port: 5181,
+    strictPort: false,
+    watch: {
+      ignored: ['**/packages/content/public/models/**', '**/dist/models/**'],
+    },
+    fs: { allow: [HERE, MODELS_DIR] },
+  },
+  preview: { host: '127.0.0.1', port: 4180 },
   build: {
     target: 'es2022',
+    sourcemap: true,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -62,4 +79,5 @@ export default defineConfig({
       },
     },
   },
+  publicDir: 'public',
 });

@@ -174,12 +174,70 @@ export function generateLot(inputs: LotInputs): LatentLot {
     });
   }
 
+  // Post-draw guarantee: when the day's pool includes a Rework-class defect,
+  // every shift must present at least one so the rework bench is reachable.
+  // Runs after all RNG draws so draw counts stay fixed and the lot remains a
+  // pure function of (seed, day, defects).
+  const guaranteed = ensureReworkableWafer({ wafers }, pool);
+
   return {
     seed: run.seed,
     substituted: run.substituted,
     dayNumber: inputs.day.dayNumber,
-    wafers,
+    wafers: guaranteed.wafers,
   };
+}
+
+/**
+ * Guarantee at least one reworkable wafer when the day can produce one.
+ *
+ * Measured gap: Day 1 lacked a reworkable wafer in ~1/3 of seeds, so players
+ * finished the training day without meeting the RCA bench. Injection is
+ * deterministic (lowest wafer index compatible with the first Rework profile)
+ * and never draws from the RNG stream.
+ */
+export function ensureReworkableWafer(
+  lot: { readonly wafers: readonly LatentWafer[] },
+  pool: readonly DefectProfile[],
+): { readonly wafers: readonly LatentWafer[] } {
+  const reworkProfiles = pool.filter((d) => d.defaultAction === 'Rework');
+  if (reworkProfiles.length === 0) return lot;
+
+  const hasRework = lot.wafers.some((w) =>
+    w.latentDefects.some((d) => reworkProfiles.some((p) => p.defectType === d.defectType)),
+  );
+  if (hasRework) return lot;
+
+  const profile = reworkProfiles[0]!;
+  const layer = DEFECT_ROUTING[profile.defectType];
+  let targetIdx = lot.wafers.findIndex((w) => w.routingStep === layer);
+  if (targetIdx < 0) targetIdx = 0;
+
+  const injected: LatentDefect = {
+    defectType: profile.defectType,
+    defectClass: profile.defectClass,
+    severity: profile.severity,
+    // Fixed region — not an RNG draw; presentation only.
+    regionX: 0.42,
+    regionY: 0.58,
+  };
+
+  const wafers = lot.wafers.map((w, i) => {
+    if (i !== targetIdx) return w;
+    // Drop prior defects that belong to another routing step — rewriting the
+    // wafer's layer while leaving a HighK defect on a Substrate wafer (or the
+    // reverse) breaks the routing invariant the generator guarantees.
+    const kept = w.latentDefects.filter((d) => DEFECT_ROUTING[d.defectType] === layer);
+    const latentDefects =
+      kept.length === 0
+        ? [injected]
+        : kept.some((d) => d.defectType === injected.defectType)
+          ? kept
+          : [injected, ...kept.slice(0, Math.max(0, MAX_DEFECT_SLOTS - 1))];
+    return { ...w, routingStep: layer, latentDefects };
+  });
+
+  return { wafers };
 }
 
 /**

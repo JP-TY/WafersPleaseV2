@@ -32,6 +32,7 @@ import {
 } from '../evaluation/disposition.js';
 import { scoreDisposition, evaluateGate, scoringTableFromConfig, type ScoringTable } from '../evaluation/scoring.js';
 import { ShiftLedger, buildDebrief, type CompetencyMetrics, type DebriefReport } from '../assessment/metrics.js';
+import { buildStampFeedback, type StampFeedback } from '../assessment/stamp-feedback.js';
 import type { ActionPath, DayConfig, DefectProfile, RuleMatrix, ScoringConfig, ToolType } from '@wafers/data';
 import type { PlayerAction } from '../evaluation/disposition.js';
 
@@ -76,6 +77,8 @@ export interface StampResult {
   /** True when this wafer needs a rework minigame next. */
   readonly needsRework: boolean;
   readonly reworkDefectType: string | null;
+  /** Diegetic teaching payload — derived from sim state only. */
+  readonly feedback: StampFeedback;
 }
 
 /** The rework outcome for a wafer the player chose to rework. */
@@ -212,6 +215,8 @@ export class ShiftDirector {
 
     this.station = tickCmpBrake(this.station);
 
+    const feedback = buildStampFeedback(result, this.inputs.ruleMatrix, score.salaryDelta);
+
     return {
       outcome: result.outcome,
       correctAction,
@@ -221,6 +226,7 @@ export class ShiftDirector {
       complianceStrikes: score.complianceStrikes,
       needsRework,
       reworkDefectType,
+      feedback,
     };
   }
 
@@ -298,7 +304,10 @@ export class ShiftDirector {
       this.day.salaryTarget,
       this.day.competencyTarget,
     );
-    const debrief = buildDebrief(metrics, this.day.salaryTarget, this.day.competencyTarget);
+    const debrief = buildDebrief(metrics, this.day.salaryTarget, this.day.competencyTarget, {
+      records: this.ledger.all,
+      ruleMatrix: this.inputs.ruleMatrix,
+    });
     this.phase = 'Complete';
     return { gate, debrief };
   }

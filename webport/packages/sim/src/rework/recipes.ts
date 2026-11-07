@@ -28,7 +28,11 @@ export interface RecipeStep {
   readonly purpose: string;
   readonly targetC: { min: number; nominal: number; max: number };
   readonly realDwellMinutes: { min: number; nominal: number; max: number };
+  /** Nominal dwell, game seconds. */
   readonly dwellSeconds: number;
+  /** Inclusive dwell window the simulation grades against, game seconds. */
+  readonly dwellMinSeconds: number;
+  readonly dwellMaxSeconds: number;
 }
 
 export interface Recipe {
@@ -44,8 +48,22 @@ export interface Recipe {
 }
 
 /** The built-in recipes, used when no config is supplied. */
+function step(
+  partial: Omit<RecipeStep, 'dwellMinSeconds' | 'dwellMaxSeconds'> & {
+    dwellMinSeconds?: number;
+    dwellMaxSeconds?: number;
+  },
+): RecipeStep {
+  const nom = partial.dwellSeconds;
+  return {
+    ...partial,
+    dwellMinSeconds: partial.dwellMinSeconds ?? nom * 0.7,
+    dwellMaxSeconds: partial.dwellMaxSeconds ?? nom * 1.3,
+  };
+}
+
 const BUILTIN_RCA: RecipeStep[] = [
-  {
+  step({
     key: 'SC1',
     label: 'SC-1 — ALKALINE ORGANIC / PARTICLE CLEAN',
     purpose: 'Lift organic film, particles and native-oxide regrowth before the gate oxide grows.',
@@ -54,8 +72,10 @@ const BUILTIN_RCA: RecipeStep[] = [
     targetC: { ...PROCESS.rca.sc1.target },
     realDwellMinutes: { min: 10, nominal: 10, max: 15 },
     dwellSeconds: PROCESS.rca.sc1.dwellSeconds.nominal,
-  },
-  {
+    dwellMinSeconds: PROCESS.rca.sc1.dwellSeconds.min,
+    dwellMaxSeconds: PROCESS.rca.sc1.dwellSeconds.max,
+  }),
+  step({
     key: 'QDR1',
     label: 'QDR — MEGASONIC DI RINSE',
     purpose: 'Stop alkaline and peroxide carryover from contaminating the acid bath.',
@@ -64,8 +84,10 @@ const BUILTIN_RCA: RecipeStep[] = [
     targetC: { ...PROCESS.rca.qdr.target },
     realDwellMinutes: { min: 2, nominal: 5, max: 5 },
     dwellSeconds: PROCESS.rca.qdr.dwellSeconds.nominal,
-  },
-  {
+    dwellMinSeconds: PROCESS.rca.qdr.dwellSeconds.min,
+    dwellMaxSeconds: PROCESS.rca.qdr.dwellSeconds.max,
+  }),
+  step({
     key: 'SC2',
     label: 'SC-2 — ACIDIC METAL-ION CLEAN',
     purpose: 'Oxidatively desorb and complex away metal ions that SC-1 cannot reach.',
@@ -74,8 +96,10 @@ const BUILTIN_RCA: RecipeStep[] = [
     targetC: { ...PROCESS.rca.sc2.target },
     realDwellMinutes: { min: 10, nominal: 10, max: 12 },
     dwellSeconds: PROCESS.rca.sc2.dwellSeconds.nominal,
-  },
-  {
+    dwellMinSeconds: PROCESS.rca.sc2.dwellSeconds.min,
+    dwellMaxSeconds: PROCESS.rca.sc2.dwellSeconds.max,
+  }),
+  step({
     key: 'QDR2',
     label: 'QDR — FINAL MEGASONIC RINSE',
     purpose: 'Leave the wafer clean and at ambient for transfer to the next tool.',
@@ -84,11 +108,13 @@ const BUILTIN_RCA: RecipeStep[] = [
     targetC: { ...PROCESS.rca.qdr.target },
     realDwellMinutes: { min: 2, nominal: 5, max: 5 },
     dwellSeconds: PROCESS.rca.qdr.dwellSeconds.nominal,
-  },
+    dwellMinSeconds: PROCESS.rca.qdr.dwellSeconds.min,
+    dwellMaxSeconds: PROCESS.rca.qdr.dwellSeconds.max,
+  }),
 ];
 
 const BUILTIN_SILICIDE: RecipeStep[] = [
-  {
+  step({
     key: 'RAMP',
     label: 'FORMATION ANNEAL — WATCH Rs FALL',
     purpose: 'Form the initial titanium silicide and watch it convert C49 to C54.',
@@ -97,8 +123,10 @@ const BUILTIN_SILICIDE: RecipeStep[] = [
     targetC: { min: 18, nominal: 22, max: 26 },
     realDwellMinutes: { min: 2, nominal: 7, max: 11 },
     dwellSeconds: 14,
-  },
-  {
+    dwellMinSeconds: 6,
+    dwellMaxSeconds: 22,
+  }),
+  step({
     key: 'WASH',
     label: 'ULTRASONIC STRIP WASH',
     purpose: 'Lift unreacted pathway titanium while the lattice is still C49 and strippable.',
@@ -106,9 +134,12 @@ const BUILTIN_SILICIDE: RecipeStep[] = [
     removes: 'Stray titanium stringers on the sidewall spacers',
     targetC: { min: 18, nominal: 22, max: 26 },
     realDwellMinutes: { min: 1, nominal: 3, max: 5 },
-    dwellSeconds: 3,
-  },
-  {
+    // Gameplay-tuned window: long enough to strip, short enough to spare the contact.
+    dwellSeconds: 1.2,
+    dwellMinSeconds: 0.35,
+    dwellMaxSeconds: 2.2,
+  }),
+  step({
     key: 'CONVERSION',
     label: 'CONVERSION ANNEAL — VERIFY CONTACT',
     purpose: 'Complete C54 formation and confirm the preserved contact resistance is in spec.',
@@ -117,11 +148,13 @@ const BUILTIN_SILICIDE: RecipeStep[] = [
     targetC: { min: 18, nominal: 22, max: 26 },
     realDwellMinutes: { min: 3, nominal: 6, max: 9 },
     dwellSeconds: 12,
-  },
+    dwellMinSeconds: 6,
+    dwellMaxSeconds: 18,
+  }),
 ];
 
 const BUILTIN_CMP: RecipeStep[] = [
-  {
+  step({
     key: 'CALIBRATE',
     label: 'CALIBRATE — WAVELENGTH AND GAIN',
     purpose: 'Make the reflected fringe signal legible before trusting any endpoint.',
@@ -130,8 +163,10 @@ const BUILTIN_CMP: RecipeStep[] = [
     targetC: { min: 18, nominal: 22, max: 26 },
     realDwellMinutes: { min: 1, nominal: 3, max: 6 },
     dwellSeconds: 7,
-  },
-  {
+    dwellMinSeconds: 3,
+    dwellMaxSeconds: 12,
+  }),
+  step({
     key: 'ALIGN',
     label: 'ALIGN — PHASE TO REFERENCE',
     purpose: 'Match the measured curve to the stored reference so the knee reads at the right thickness.',
@@ -140,8 +175,10 @@ const BUILTIN_CMP: RecipeStep[] = [
     targetC: { min: 18, nominal: 22, max: 26 },
     realDwellMinutes: { min: 1, nominal: 4, max: 7 },
     dwellSeconds: 8,
-  },
-  {
+    dwellMinSeconds: 3,
+    dwellMaxSeconds: 14,
+  }),
+  step({
     key: 'LOCK',
     label: 'LOCK — ENGAGE SAFETY BRAKE',
     purpose: 'Arm the polisher brake for the next 5 wafers and prevent structural dishing.',
@@ -150,7 +187,9 @@ const BUILTIN_CMP: RecipeStep[] = [
     targetC: { min: 18, nominal: 22, max: 26 },
     realDwellMinutes: { min: 1, nominal: 2, max: 4 },
     dwellSeconds: 5,
-  },
+    dwellMinSeconds: 2,
+    dwellMaxSeconds: 8,
+  }),
 ];
 
 /** GDD §8C: a correct CMP calibration arms the brake for five wafers. */
@@ -207,6 +246,8 @@ function toRecipeStep(s: ReworkStepConfig, fallbackC: number): RecipeStep {
     targetC: s.targetC ? { ...s.targetC } : { min: fallbackC - 4, nominal: fallbackC, max: fallbackC + 4 },
     realDwellMinutes: { ...s.realDwellMinutes },
     dwellSeconds: s.dwellSeconds.nominal,
+    dwellMinSeconds: s.dwellSeconds.min,
+    dwellMaxSeconds: s.dwellSeconds.max,
   };
 }
 

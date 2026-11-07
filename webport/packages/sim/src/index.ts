@@ -14,6 +14,7 @@ export * from './rework/recipes.js';
 export * from './assessment/metrology.js';
 export * from './evaluation/scoring.js';
 export * from './assessment/metrics.js';
+export * from './assessment/stamp-feedback.js';
 export * from './shift/shift-director.js';
 export * from './shift/campaign.js';
 export * from './rework/process.js';
