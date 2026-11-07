@@ -1,0 +1,22 @@
+{
+  "scoring": {
+    "id": "scoring",
+    "baseSalaryPerWafer": 100,
+    "correctBonusMultiplier": 2,
+    "incorrectPenaltyMultiplier": 0.5,
+    "correctCompetencyGain": 5,
+    "incorrectCompetencyPenalty": 15,
+    "salaryGradeThresholds": [
+      0,
+      500,
+      1500,
+      3000
+    ],
+    "competencyGradeThresholds": [
+      0,
+      30,
+      60,
+      90
+    ]
+  }
+}
