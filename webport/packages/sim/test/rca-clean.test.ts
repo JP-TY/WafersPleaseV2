@@ -217,8 +217,11 @@ describe('determinism', () => {
   it('replays identically for the same seed', () => {
     const play = () => {
       const g = fresh(4242);
-      runStep(g, 'sc1', 11);
-      runStep(g, 'sc2', 11);
+      runStep(g, 'sc1', 11); // SC-1
+      runStep(g, 'sc1', 6); // QDR1 (heater ignored for rinse)
+      runStep(g, 'sc2', 11); // SC-2
+      runStep(g, 'sc2', 6); // QDR2
+      expect(g.result).not.toBeNull();
       return g.result;
     };
     expect(play()).toEqual(play());

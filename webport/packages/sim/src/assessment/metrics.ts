@@ -139,7 +139,9 @@ export class ShiftLedger {
   metrics(): CompetencyMetrics {
     const rs = this.records;
     const total = rs.length;
-    const safeDiv = (a: number, b: number) => (b === 0 ? 1 : a / b);
+    // Success ratios default to 1 when the denominator is empty; failure rates
+    // must default to 0 (no killers presented ⇒ no killer false-accepts).
+    const safeDiv = (a: number, b: number, empty = 1) => (b === 0 ? empty : a / b);
 
     const correct = rs.filter((r) => r.result.outcome === 'Correct').length;
     const falseAccepts = rs.filter((r) => r.result.outcome === 'FalseAccept').length;
@@ -154,7 +156,7 @@ export class ShiftLedger {
 
     // Killer defects presented = wafers that had any Catastrophic defect.
     const killerPresented = rs.filter((r) => r.defectClasses.includes('Catastrophic')).length;
-    const killerFalseAcceptRate = safeDiv(killerFalseAccepts, killerPresented);
+    const killerFalseAcceptRate = safeDiv(killerFalseAccepts, killerPresented, 0);
 
     // Failure-mode identification (GDD §3): did the player correctly treat
     // catastrophic defects as catastrophic, and parametric defects as merely
