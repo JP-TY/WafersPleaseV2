@@ -68,6 +68,17 @@ export const DefectProfile = z.object({
   detectionDifficulty: z.enum(DETECTION_DIFFICULTIES),
   requiredTool: z.enum(TOOL_TYPES),
   defaultAction: z.enum(ACTION_PATHS),
+  /**
+   * DEPRECATED — do not drive logic from this field.
+   *
+   * In the Unity source, `DefectProfileSO.reworkAction` defaults to `Rework`
+   * for every defect, including ones the GDD §7 matrix marks Reject. It is a
+   * stale field-initializer default, not authored intent. The authoritative
+   * correct-action per defect is the matching `RuleEntry.correctAction`, which
+   * the converted rule matrices verify against the GDD. `defaultAction` agrees
+   * with the rule matrix everywhere; `reworkAction` does not, and must not be
+   * used. Kept only for provenance.
+   */
   reworkAction: z.enum(ACTION_PATHS),
   /** 0..1. Unity allowed any float; clamped here so scoring can trust it. */
   severity: z.number().min(0).max(1),
@@ -89,6 +100,19 @@ export const ToolConfig = z.object({
 });
 export type ToolConfig = z.infer<typeof ToolConfig>;
 
+/**
+ * How strongly the game scaffolds this day.
+ *
+ * GDD §12: scaffolded context prompts "fade away by Day 3." The Unity source
+ * authored `showContextPrompts: 1` on all three days — a flat boolean that
+ * never fades, contradicting the GDD. This field encodes the intended ramp:
+ * Day 1 always prompts, Day 2 prompts only on first encounter of each defect
+ * class, Day 3 prompts are off. The raw Unity boolean is kept below for
+ * provenance and flagged by the validator when it disagrees with this ramp.
+ */
+export const CALLOUT_MODES = ['Always', 'FirstOccurrencePerDefectClass', 'Disabled'] as const;
+export type CalloutMode = (typeof CALLOUT_MODES)[number];
+
 /** DayConfigSO. `allowedDefects` and `availableTools` were asset refs / ordinals. */
 export const DayConfig = z.object({
   id: ConfigId,
@@ -101,7 +125,13 @@ export const DayConfig = z.object({
   allowedDefects: z.array(ConfigId).min(1),
   availableTools: z.array(z.enum(TOOL_TYPES)).min(1),
   defectDensity: z.number().min(0).max(1),
+  /**
+   * Raw Unity value, kept for provenance only. GDD §12 requires the prompts to
+   * fade by Day 3, so derive behaviour from `calloutMode`, not this boolean.
+   */
   showContextPrompts: z.boolean().default(true),
+  /** The GDD-faithful scaffolding ramp for this day. */
+  calloutMode: z.enum(CALLOUT_MODES).default('Always'),
 });
 export type DayConfig = z.infer<typeof DayConfig>;
 

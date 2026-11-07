@@ -1,0 +1,19 @@
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #0b0e13; overflow: hidden;
+  font-family: 'DejaVu Sans', system-ui, sans-serif; }
+#stage { width: 100vw; height: 100vh; display: block; touch-action: none; }
+#hud { position: fixed; left: 16px; bottom: 14px; z-index: 10; user-select: none; }
+#hud .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.tab {
+  background: #151b23; color: #7d8b9c; border: 1px solid #2c3542;
+  border-radius: 6px; padding: 7px 13px; font: 600 12px/1 'DejaVu Sans Mono', monospace;
+  letter-spacing: .04em; cursor: pointer;
+}
+.tab:hover { color: #d7e2ee; border-color: #4a5a6e; }
+.tab.active { color: #0b0e13; background: #5ec8d8; border-color: #5ec8d8; }
+.hint { color: #7d8b9c; font: 500 12px/1.5 'DejaVu Sans Mono', monospace; }
+.meta { color: #4a5a6e; font: 500 10px/1.6 'DejaVu Sans Mono', monospace; }
+#title { position: fixed; left: 16px; top: 14px; z-index: 10; color: #d7e2ee;
+  font: 700 13px/1 'DejaVu Sans Mono', monospace; letter-spacing: .08em; }
+#title small { display:block; color:#4a5a6e; font-weight:500; letter-spacing:.04em; margin-top:5px; }

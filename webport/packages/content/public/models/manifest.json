@@ -1,57 +1,38 @@
 {
   "generatedBy": "packages/content/scripts/build-assets.mjs",
-  "source": "Assets/Models",
-  "geometry": "meshopt",
-  "textures": {
-    "format": "webp",
-    "maxSize": 1024,
-    "effort": 7
-  },
-  "budget": {
-    "total": 4194304,
-    "single": 1048576
-  },
-  "totalBytes": 3312748,
+  "budgetTotal": 4194304,
   "props": [
     {
       "name": "Console",
-      "bytes": 354712,
-      "sourceBytes": 6521904
+      "bytes": 354712
     },
     {
       "name": "DataSlate",
-      "bytes": 283988,
-      "sourceBytes": 5502088
+      "bytes": 283988
     },
     {
       "name": "Foup",
-      "bytes": 570892,
-      "sourceBytes": 8892276
+      "bytes": 570892
     },
     {
       "name": "IncidentReport",
-      "bytes": 474612,
-      "sourceBytes": 7613740
+      "bytes": 474612
     },
     {
       "name": "Inspection",
-      "bytes": 347672,
-      "sourceBytes": 6255048
+      "bytes": 347672
     },
     {
       "name": "Room",
-      "bytes": 398072,
-      "sourceBytes": 6721876
+      "bytes": 398072
     },
     {
       "name": "Wafer",
-      "bytes": 421208,
-      "sourceBytes": 7150428
+      "bytes": 421208
     },
     {
       "name": "Workbench",
-      "bytes": 461592,
-      "sourceBytes": 7730976
+      "bytes": 461592
     }
   ]
 }
