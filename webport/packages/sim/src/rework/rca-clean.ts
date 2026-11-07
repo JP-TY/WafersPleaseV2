@@ -65,6 +65,10 @@ export interface RcaCleanState {
   immersed: boolean;
   /** Seconds spent immersed in the current step. */
   dwellSeconds: number;
+  /** Arrhenius (or rinse) exposure accumulated while immersed this step. */
+  exposure: number;
+  /** Substrate damage accrued across chemical steps so far. */
+  cumulativeDamage: number;
   /** True once the step's timer has run past any plausible recovery. */
   timedOut: boolean;
   finished: boolean;
@@ -149,6 +153,8 @@ export const createRcaClean = (rng: Rng, difficulty: number): ReworkMinigame<Rca
     active: 'sc1',
     immersed: false,
     dwellSeconds: 0,
+    exposure: 0,
+    cumulativeDamage: 0,
     timedOut: false,
     finished: false,
     result: null,
@@ -157,39 +163,29 @@ export const createRcaClean = (rng: Rng, difficulty: number): ReworkMinigame<Rca
   const bathFor = (s: RcaCleanState): RcaBath =>
     s.step.kind === 'SC1' ? s.baths.sc1 : s.step.kind === 'SC2' ? s.baths.sc2 : s.baths.sc1;
 
-  /**
-   * Cumulative Arrhenius exposure of the soak so far, dimensionless.
-   *
-   * Integrates the Arrhenius-scaled rate over the whole soak rather than
-   * comparing a single temperature reading at the end, which is how the Unity
-   * version decided it: a player could soak correctly and then slam the heater
-   * to 95 in the frame they raised the wafer, and fail.
-   */
-  const exposureOf = (s: RcaCleanState): number => {
+  /** Instantaneous exposure rate for the active step at the current bath temp. */
+  const exposureRate = (s: RcaCleanState): number => {
     if (s.step.kind === 'QDR1' || s.step.kind === 'QDR2') {
-      // A rinse is a transfer function, not a reaction: linear in dwell, with no
-      // Arrhenius term and no attack on the substrate.
-      return (s.dwellSeconds / s.step.dwellSeconds) * PROCESS.rca.completionExposure;
+      // A rinse is a transfer function, not a reaction: linear in dwell.
+      return PROCESS.rca.completionExposure / Math.max(s.step.dwellSeconds, 1e-6);
     }
     const bath = bathFor(s);
-    const rate =
+    return (
       PROCESS.rca.preExponential *
-      arrheniusRatio(bath.temperatureC, s.step.targetC.nominal, PROCESS.rca.activationEnergyJPerMol);
-    return rate * s.dwellSeconds;
+      arrheniusRatio(bath.temperatureC, s.step.targetC.nominal, PROCESS.rca.activationEnergyJPerMol)
+    );
   };
 
   /** Fraction of the target species removed. Bounded by 1 by construction. */
-  const removalFraction = (s: RcaCleanState): number => 1 - Math.exp(-exposureOf(s));
+  const removalFraction = (s: RcaCleanState): number => 1 - Math.exp(-s.exposure);
 
   /**
-   * Surplus exposure past completion, which is substrate attack.
-   *
-   * Separate from removal because removal saturates: once the contaminant is
-   * gone, more time in the bath does not remove more, it damages.
+   * Surplus exposure past completion for the current chemical step.
+   * Rinses do not attack the substrate.
    */
-  const damageOf = (s: RcaCleanState): number => {
+  const stepDamage = (s: RcaCleanState): number => {
     if (s.step.kind === 'QDR1' || s.step.kind === 'QDR2') return 0;
-    return Math.max(0, exposureOf(s) - PROCESS.rca.completionExposure) * PROCESS.rca.damageCoeff;
+    return Math.max(0, s.exposure - PROCESS.rca.completionExposure) * PROCESS.rca.damageCoeff;
   };
 
   const resolve = (result: ReworkResult): void => {
@@ -202,6 +198,7 @@ export const createRcaClean = (rng: Rng, difficulty: number): ReworkMinigame<Rca
     state.stepIndex++;
     state.step = STEPS[state.stepIndex] ?? STEPS[STEPS.length - 1]!;
     state.dwellSeconds = 0;
+    state.exposure = 0;
     state.immersed = false;
     state.active = state.step.kind === 'SC2' ? 'sc2' : state.step.kind === 'QDR1' || state.step.kind === 'QDR2' ? 'qdr' : 'sc1';
   };
@@ -226,6 +223,7 @@ export const createRcaClean = (rng: Rng, difficulty: number): ReworkMinigame<Rca
 
     if (!state.immersed) return;
     state.dwellSeconds += dt;
+    state.exposure += exposureRate(state) * dt;
 
     // Hard ceiling: far past any recovery, and for SC-2 it is destructive.
     const ceiling = state.step.dwellSeconds * 3;
@@ -260,6 +258,7 @@ export const createRcaClean = (rng: Rng, difficulty: number): ReworkMinigame<Rca
         // Dwell starts at immersion, not during a descent animation. The Unity
         // version charged its 0.4 s dip to the soak.
         state.dwellSeconds = 0;
+        state.exposure = 0;
         return;
       }
 
@@ -274,7 +273,7 @@ export const createRcaClean = (rng: Rng, difficulty: number): ReworkMinigame<Rca
 
   const evaluate = (): void => {
     const fraction = removalFraction(state);
-    const damage = damageOf(state);
+    const damage = stepDamage(state);
     const isRinse = state.step.kind === 'QDR1' || state.step.kind === 'QDR2';
     const spec = state.step;
 
@@ -295,6 +294,7 @@ export const createRcaClean = (rng: Rng, difficulty: number): ReworkMinigame<Rca
       return;
     }
 
+    // A single step that overshoots the damage limit scraps immediately.
     if (damage > PROCESS.rca.damageLimit && !isRinse) {
       resolve({
         outcome: 'irreversible',
@@ -306,10 +306,11 @@ export const createRcaClean = (rng: Rng, difficulty: number): ReworkMinigame<Rca
       return;
     }
 
-    // Step passed.
+    // Step passed — bank chemical damage so the final rinse cannot erase it.
+    if (!isRinse) state.cumulativeDamage += damage;
+
     if (state.stepIndex >= STEPS.length - 1) {
-      // Reward a step that finished close to its window without surplus exposure.
-      const quality = clamp01(1 - damage / Math.max(PROCESS.rca.damageLimit * 2, 1e-6));
+      const quality = clamp01(1 - state.cumulativeDamage / Math.max(PROCESS.rca.damageLimit * 2, 1e-6));
       resolve({
         outcome: 'success',
         success: true,

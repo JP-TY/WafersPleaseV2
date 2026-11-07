@@ -28,7 +28,8 @@ export const GAME_SECONDS_PER_PROCESS_MINUTE = 60;
 export const REAL_SECONDS_PER_GAME_SECOND = 60;
 
 export const realSeconds = (gameSeconds: number): number => gameSeconds * REAL_SECONDS_PER_GAME_SECOND;
-export const realMinutes = (gameSeconds: number): number => gameSeconds / GAME_SECONDS_PER_PROCESS_MINUTE;
+/** At 60× compression, one game second is one real process minute. */
+export const realMinutes = (gameSeconds: number): number => gameSeconds;
 
 // ---------------------------------------------------------------------------
 // Physics constants
@@ -118,7 +119,8 @@ export const PROCESS = {
      * happens: once the surface is clean, continued hot SC-1/SC-2 exposure
      * attacks the substrate and the gate interface.
      */
-    completionExposure: 3.912,
+    /** -ln(1 - removalTarget); exact so a nominal dwell at rate 1.0 just hits. */
+    completionExposure: -Math.log(1 - 0.98),
     /** Surplus exposure the surface tolerates before it is damaged. */
     damageLimit: 2.0,
     /** Multiplier from surplus exposure to reported damage. */
@@ -286,14 +288,16 @@ export const stepBathTemperature = (
   rates: { heat: number; cool: number },
 ): number => {
   const ambient = PROCESS.rca.sc1.ambientC;
-  if (setpointC > ambient) {
-    // Heating: first-order approach to the setpoint at a finite slew rate.
-    return Math.min(setpointC, currentC + rates.heat * dt);
-  }
-  // Heater off or set below ambient: the bath loses heat toward ambient.
   const target = Math.max(ambient, setpointC);
-  if (currentC <= target) return ambient;
-  return Math.max(target, currentC - rates.cool * dt);
+  if (currentC < target) {
+    // Heating toward the setpoint at a finite slew rate.
+    return Math.min(target, currentC + rates.heat * dt);
+  }
+  if (currentC > target) {
+    // Cooling toward the setpoint (or ambient when the heater is off).
+    return Math.max(target, currentC - rates.cool * dt);
+  }
+  return currentC;
 };
 
 /**

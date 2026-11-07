@@ -55,6 +55,7 @@ export class SilicideBench {
 
     scene.onPointerObservable.add((info) => {
       if (info.type !== PointerEventTypes.POINTERDOWN) return;
+      if (this.sim.finished) return;
       const at = pickPanel(scene, this.mount.screen, W, H);
       if (!at) return;
       const { px, py } = at;

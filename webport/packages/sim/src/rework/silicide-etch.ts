@@ -205,8 +205,8 @@ export const createSilicideEtch = (
         success: false,
         quality: 0,
         detail: penalty > 5
-          ? `No wash fired. C54 nucleated and grew across the stringer at ${realSeconds(state.elapsedSeconds).toFixed(0)} s of anneal — the bridge is now part of the circuit. The contact also thinned to ${state.contactNm.toFixed(1)} nm. Scrap.`
-          : `No wash fired. C54 nucleated and grew across the stringer at ${realSeconds(state.elapsedSeconds).toFixed(0)} s of anneal. Once C54 forms the lattice is stable and the alkaline peroxide bath cannot lift it. Scrap.`,
+          ? `C49 window expired. C54 nucleated and grew across the stringer at ${realSeconds(state.elapsedSeconds).toFixed(0)} s of anneal — the bridge is now part of the circuit. The wash also thinned the contact to ${state.contactNm.toFixed(1)} nm. Scrap.`
+          : `C49 window expired. C54 nucleated and grew across the stringer at ${realSeconds(state.elapsedSeconds).toFixed(0)} s of anneal. Once C54 forms the lattice is stable and the alkaline peroxide bath cannot lift it. Scrap.`,
         irreversible: true,
       });
     }
